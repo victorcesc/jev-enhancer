@@ -1,0 +1,10 @@
+{
+  "name": "jev-enhancer",
+  "version": "0.1.0",
+  "description": "Code review agent-driven: o harness é dono da LLM, o jev-enhancer é dono do protocolo de review.",
+  "type": "module",
+  "bin": { "jev": "./src/cli.mjs" },
+  "engines": { "node": ">=20" },
+  "files": ["src", "adapters", "README.md"],
+  "license": "MIT"
+}

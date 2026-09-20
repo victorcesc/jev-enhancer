@@ -1,0 +1,5 @@
+node_modules/
+.jev/runs.jsonl
+.jev/review-context.md
+.jev/findings*.json
+.env

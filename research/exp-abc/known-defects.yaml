@@ -16,6 +16,7 @@
 #        borda (pagamento em excesso, customer_id nulo) nunca exercitados
 #   +2 — c-2: helpers pgtype duplicados de internal/sync/pgconv.go, e
 #        productID semeado no teste e nunca usado
+#   +1 — a-1 (reexecução): rota versionada convivendo com rotas na raiz
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -26,7 +27,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 22
+known_total: 23
 
 defects:
   - id: sqlc-not-generated
@@ -152,7 +153,8 @@ defects:
       desktop sale_repository.rs:198 usa (p.total_paid IS NULL OR p.total_paid
       < s.total); a API usa COALESCE(p.total_paid,0) < s.total. Divergem para
       venda com total <= 0 e sem pagamento.
-    match_any: ["paridade", "parity", "sale_repository", "desktop", "is null or"]
+    # "desktop" sozinho casava com qualquer achado que mencionasse o cliente.
+    match_any: ["paridade", "parity", "sale_repository", "is null or", "total <= 0", "total zero"]
 
   # --- descobertos em b-1 (teto de achados em 20), verificados no código ---
 
@@ -246,6 +248,18 @@ defects:
       (declaração e Scan) e nunca numa asserção. Nenhuma query de fiado toca
       products ou sale_items. Seed morto.
     match_any: ["productid", "seed morto", "produto que nenhuma", "nunca usado depois"]
+
+  - id: versioned-route-inconsistent
+    severity: low
+    file: packages/api-go/internal/handler/fiado_router.go
+    title: "rota versionada /api/v1/ convivendo com rotas sem versão na raiz"
+    detail: >
+      MountFiado usa router.Route("/api/v1/customers"), enquanto MountAuth usa
+      "/auth" e MountSync usa "/sync" — todas no mesmo router em
+      cmd/server/main.go. Dois esquemas de URL concorrentes na mesma API, e o
+      cliente desktop passa a manter duas bases de caminho. Verificado.
+    match_any: ["/api/v1/customers\" enquanto", "sem versionamento", "dois esquemas",
+                "duas bases de caminho", "esquemas de url", "rota versionada"]
 
   - id: single-letter-params
     severity: low

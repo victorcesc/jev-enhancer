@@ -271,17 +271,24 @@ def summary():
         print(f"{arm.upper():7}{n:>3}{f(ach,'.1f'):>20}{f(rec,'.0%'):>20}"
               f"{f(tok,',.0f'):>26}{f(sec,'.0f'):>18}")
     print("-" * 94)
+    # Comparação PAR A PAR. Um veredito global esconde o caso em que A empata
+    # com B mas B separa de C — foi exatamente o que aconteceu aqui.
+    from itertools import combinations
+
     arms = sorted(data)
-    if len(arms) > 1:
-        piores = {a: min(s["recall"] for s, _, _ in data[a]) for a in arms}
-        melhores = {a: max(s["recall"] for s, _, _ in data[a]) for a in arms}
-        top = max(arms, key=lambda a: sum(s["recall"] for s, _, _ in data[a]) / len(data[a]))
-        conclusivo = all(piores[top] > melhores[a] for a in arms if a != top)
-        print(f"braço com maior recall médio: {top.upper()}")
-        print("CONCLUSIVO: o pior caso dele supera o melhor caso dos outros."
-              if conclusivo else
-              "NÃO CONCLUSIVO: as faixas se sobrepõem — a diferença entre braços é menor\n"
-              "que a variância dentro de cada braço. Mais repetições ou aceitar o empate.")
+    if len(arms) < 2:
+        return
+    rec = {a: [s["recall"] for s, _, _ in data[a]] for a in arms}
+    print("\ncomparações par a par (só conta como separação se as faixas não se tocam):")
+    for x, y in combinations(arms, 2):
+        mx, my = sum(rec[x]) / len(rec[x]), sum(rec[y]) / len(rec[y])
+        hi, lo = (x, y) if mx > my else (y, x)
+        if min(rec[hi]) > max(rec[lo]):
+            print(f"  {hi.upper()} > {lo.upper()}   SEPARADO — pior caso de {hi.upper()} "
+                  f"({min(rec[hi]):.0%}) supera o melhor de {lo.upper()} ({max(rec[lo]):.0%})")
+        else:
+            print(f"  {x.upper()} ~ {y.upper()}   empate — faixas se sobrepõem "
+                  f"({min(rec[x]):.0%}–{max(rec[x]):.0%} vs {min(rec[y]):.0%}–{max(rec[y]):.0%})")
 
 
 def saturation():
@@ -344,6 +351,32 @@ def diversity():
             marg = "—" if prev is None else f"+{(avg - prev) * KNOWN['known_total']:.1f} bugs"
             print(f"{a:8}{k:>3}{avg:>15.0%}{marg:>12}")
             prev = avg
+    # A pergunta que decide o produto: pareando CUSTO, quem entrega mais?
+    # Comparar 1 execução de B com 1 de C é injusto — B custa mais. O teste
+    # honesto é comparar configurações de custo parecido.
+    print(f"\n{'configuração':18}{'recall':>9}{'tokens':>14}{'defeitos/M tokens':>20}")
+    print("-" * 61)
+    linhas = []
+    for a in arms:
+        rs = [s for s in scored if s["arm"] == a]
+        toks = [usage(HERE / "runs" / s["run"]).get("tokens", 0) for s in rs]
+        medio = sum(toks) / len(toks)
+        for k in range(1, len(rs) + 1):
+            vals = [len(set().union(*(set(s["found_known"]) for s in combo))) / KNOWN["known_total"]
+                    for combo in combinations(rs, k)]
+            r = sum(vals) / len(vals)
+            custo = medio * k
+            linhas.append((f"{k}x {a.upper()}", r, custo,
+                           r * KNOWN["known_total"] / (custo / 1e6)))
+    for nome, r, custo, eff in sorted(linhas, key=lambda x: x[2]):
+        print(f"{nome:18}{r:>8.0%}{custo:>14,.0f}{eff:>20.1f}")
+    print("-" * 61)
+    dom = [(n, r, c) for n, r, c in [(l[0], l[1], l[2]) for l in linhas]]
+    for n1, r1, c1 in dom:
+        piores = [n2 for n2, r2, c2 in dom if n2 != n1 and r2 <= r1 and c2 >= c1]
+        if piores:
+            print(f"{n1} domina (mais recall E menos tokens que): {', '.join(piores)}")
+
     # união entre braços diferentes: diversidade vem do protocolo, não do sorteio
     if len(arms) > 1:
         print(f"\n{'união entre braços distintos (1 execução de cada)':<40}")

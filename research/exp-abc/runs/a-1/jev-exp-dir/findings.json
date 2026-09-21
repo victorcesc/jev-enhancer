@@ -1,0 +1,74 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "query/fiado.sql foi adicionado mas o sqlc nunca foi regerado: nao existe internal/db/fiado.sql.go. Todos os tipos usados (db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams/Row, db.SummarizePendingFiadoSalesByCustomerParams/Row) estao indefinidos e *db.Queries nao tem os metodos. `go build ./...` e `go vet ./...` quebram o modulo inteiro (cmd/server/main.go importa internal/fiado), entao nem os testes existentes rodam. Falta rodar `make -C packages/api-go sqlc` e versionar o arquivo gerado."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "A subquery `(SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id)` nao tem nenhum filtro e o predicado externo (s.user_id / s.customer_id) nao pode ser empurrado para dentro de um GROUP BY. O Postgres agrega a tabela payments inteira (todos os tenants) a cada requisicao, e a query roda duas vezes por request (lista + sumario). Com a base crescendo, um GET /api/v1/customers/{id}/fiado de um cliente com 2 vendas varre milhoes de linhas de payments. Correlacionar por venda (LATERAL / subquery correlacionada ou JOIN payments filtrado por sale_id IN (...)) elimina o scan completo."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "med",
+      "issue": "Erro de conversao de pgtype.Numeric e descartado e vira 0. Aplicado a summary.TotalDevido (linha 57), um valor que nao consiga ser lido como float64 (ex.: NaN gravado na coluna) faz a API responder HTTP 200 com total_devido=0, ou seja, informa ao operador que o cliente nao deve nada em vez de sinalizar erro. O mesmo vale para valor_original/valor_pago/saldo de cada venda (linhas 81-83). Deveria propagar o erro como 500."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "severity": "low",
+      "issue": "Todos os erros vindos do store sao substituidos por um AppError generico sem `%w` e sem log; writeFiadoFailure (handler/fiado.go:62) tambem nao loga. Uma queda de Postgres, timeout de contexto ou erro de permissao produz um 500 identico e sem nenhum rastro nos logs, impossibilitando diagnostico. O AGENTS.md exige envolver erros inspecionaveis com `%w` e logar na fronteira. Observacao: o mesmo padrao ja existe em internal/sync/initial.go, entao e uma divida herdada que esta sendo ampliada."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 38,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "severity": "low",
+      "issue": "O comentario do arquivo afirma paridade com SaleRepository::find_pending_credit_sales_by_customer, mas o predicado diverge. O desktop usa `(p.total_paid IS NULL OR p.total_paid < s.total)`; aqui e `COALESCE(p.total_paid, 0) < s.total`. Para uma venda fiado com total = 0 (ou negativo, ja que sales.total nao tem CHECK >= 0) e sem pagamentos, o desktop lista a venda e a API a omite. Os dois clientes mostram listas diferentes para o mesmo cliente."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "Sumario e listagem sao duas queries independentes fora de transacao/snapshot. Se um pagamento quitar uma venda entre as duas chamadas, a resposta pode trazer pagination.total=5 e total_devido de 5 vendas junto com um data[] de 4, ou paginar vendas que sumiram do conjunto. Uma unica query com window function (COUNT(*) OVER (), SUM(...) OVER ()) ou um pgx.Tx com snapshot repetivel resolveria."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "`saleDate, _ := timestamptzTime(row.SaleDate)` descarta o bool de validade que a propria funcao retorna. Um sale_date NULL seria serializado como \"0001-01-01T00:00:00Z\" no campo `data` em vez de erro ou null. Hoje e inalcancavel (sale_date e NOT NULL no schema), mas o segundo retorno nao serve a nada como esta: ou e tratado, ou a funcao deveria retornar so time.Time."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat / timestamptzTime",
+      "severity": "low",
+      "issue": "As duas funcoes sao copias literais de internal/sync/pgconv.go:11 e :35 (corpo identico, caractere por caractere). Como sao nao exportadas, nao ha reuso possivel entre pacotes; qualquer correcao futura (ex.: parar de engolir o erro do Float64Value) precisa ser feita em dois lugares e um deles vai ser esquecido. Extrair para um pacote interno compartilhado (ex.: internal/pgconv) evita a divergencia."
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "severity": "low",
+      "issue": "O prefixo adicionado e `/api/v1/customers/`, e nao a rota concreta. Qualquer rota futura montada sob esse prefixo (POST /api/v1/customers/{id}, DELETE, etc.) passa a dispensar o X-API-Key automaticamente por herdar o prefixo, sem decisao explicita de quem a adicionar. As entradas existentes (`/auth/me`) mostram que o padrao admite granularidade por rota."
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router.go",
+      "line": 20,
+      "symbol": "MountFiado",
+      "severity": "low",
+      "issue": "A rota e montada em `/api/v1/customers` enquanto todas as demais do servidor sao sem versionamento e na raiz (`/auth`, `/sync`, `/notas`, `/invoices`, montadas no mesmo router em cmd/server/main.go). Isso cria dois esquemas de URL concorrentes na mesma API e obriga o cliente desktop a manter duas bases de caminho. Nao ha rota legada equivalente no historico (packages/api/src/routes nunca teve fiado), entao nao e compatibilidade retroativa."
+    }
+  ]
+}

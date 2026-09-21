@@ -244,6 +244,42 @@ def matrix():
     print(row)
 
 
+def saturation():
+    """Quantos defeitos INÉDITOS cada execução acrescentou, em ordem cronológica.
+
+    É a pergunta que decide se vale somar workers: se a curva achata, um
+    review já cobre o espaço e diversidade não compra nada. Se não achata, o
+    conjunto conhecido é um piso e todo recall medido contra ele é otimista.
+    """
+    runs = [p for p in (HERE / "runs").iterdir() if p.is_dir() and (p / "result.json").exists()]
+    runs.sort(key=lambda p: (p / "result.json").stat().st_mtime)
+    seen, rows = set(), []
+    for r in runs:
+        s = score(r)
+        if not s:
+            continue
+        found = set(s["found_known"])
+        novos = found - seen
+        seen |= found
+        rows.append((r.name, len(found), len(novos), len(seen)))
+    if not rows:
+        print("nenhuma execução pontuada")
+        return
+    print(f"\n{'execução':12}{'achou':>7}{'inéditos':>10}{'acumulado':>11}{'cobertura':>11}")
+    print("-" * 51)
+    for name, n, novos, acc in rows:
+        print(f"{name:12}{n:>7}{novos:>10}{acc:>11}{acc / KNOWN['known_total']:>10.0%}")
+    print("-" * 51)
+    print("CIRCULAR: 'acumulado' chega a 100% por construção — o known set É a união")
+    print("destas execuções. O que informa é a coluna 'inéditos', não a cobertura.")
+    ultimos = [r[2] for r in rows[-3:]]
+    if sum(ultimos) > 0:
+        print(f"\nAs últimas 3 execuções ainda acrescentaram {sum(ultimos)} defeito(s) inédito(s):")
+        print("a curva NÃO saturou. O known set é um piso e todo recall aqui é otimista.")
+    else:
+        print("\nAs últimas 3 execuções não acrescentaram nada: curva aparentemente saturada.")
+
+
 def diversity():
     """Experimento B — recall da UNIÃO de k workers independentes.
 
@@ -343,6 +379,8 @@ if __name__ == "__main__":
         diversity()
     elif args[0] == "--verify-effect":
         verify_effect()
+    elif args[0] == "--saturation":
+        saturation()
     else:
         for a in args:
             report(Path(a) if Path(a).is_absolute() else HERE / a)

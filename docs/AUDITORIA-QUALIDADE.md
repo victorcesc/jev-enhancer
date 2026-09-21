@@ -56,3 +56,61 @@ defeitos — trabalho manual de horas sobre 1.400 linhas.
 
 O benchmark v2.6 mediu recall (0,89) contra ground truth, mas num diff
 diferente e com o protocolo anterior.
+
+---
+
+# Sem jev vs com jev — tempo, eficiência e cobertura
+
+A comparação é limpa porque o hook só dispara no **Stop**: tudo antes do
+bloqueio é exatamente o que aconteceria sem a ferramenta. Mesma feature, mesma
+sessão, mesmo modelo.
+
+| | sem jev | com jev | delta |
+| --- | --- | --- | --- |
+| tempo | 9,0 min | 13,8 min | **+53%** |
+| tokens | 5.137.453 | 6.969.244 | **+36%** |
+| custo | $4,76 | $6,46 | **+36%** |
+| verificação própria do agente | 1 `go vet` | 1 `go vet` | — |
+| **bugs reais encontrados** | **0** | **10** | **+10** |
+| build quebrado detectado | **não** | **sim** | |
+
+## O dado mais revelador
+
+Durante os 9 minutos de implementação, o agente rodou **um único comando de
+verificação**: `go vet ./internal/middleware/...` — num pacote que **nem era o
+que ele estava escrevendo**. Nunca executou `go build ./...` no próprio código.
+
+Por isso entregou com o build quebrado e declarou concluído.
+
+Não é que o review tenha achado bugs sutis que escapariam de qualquer um: ele
+achou, entre outras coisas, que **o código não compila** — algo que um único
+comando teria revelado, e que o agente não executou.
+
+## Eficiência do que a ferramenta adiciona
+
+| | |
+| --- | --- |
+| custo marginal | **$1,70** |
+| tempo marginal | **4,8 min** |
+| por bug real | **$0,17 e 29 segundos** |
+| precisão auditada | **10/10 (1,00)** |
+
+## Cobertura
+
+**Sem jev: 0 de 10. Com jev: 10 de 10.**
+
+Ressalva importante: isso é cobertura *sobre os 10 achados auditados*, não
+sobre o universo de defeitos do diff. Não sabemos quantos ainda escaparam —
+medir isso exigiria auditar manualmente as 1.400 linhas. O recall que temos
+(0,89) vem do benchmark v2.6, num diff diferente.
+
+O que se pode afirmar com segurança: dos defeitos que a ferramenta encontrou,
+**todos são reais, e o agente sozinho não encontrou nenhum deles.**
+
+## Leitura
+
+Trocar **+53% de tempo e +36% de custo** por **10 defeitos reais, incluindo
+código que não compila**, é uma troca favorável em quase qualquer cenário —
+principalmente porque o bug mais grave (build quebrado) seria descoberto de
+qualquer forma, só que mais tarde e mais caro: no CI, no PR, ou pelo
+desenvolvedor abrindo o projeto.

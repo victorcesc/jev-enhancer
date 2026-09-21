@@ -111,6 +111,68 @@ defeito real é um número muito bom para uma varredura de primeira passada,
 desde que ninguém confunda isso com cobertura e alguém leia os achados com
 ceticismo.
 
+## Atualização — o protocolo era parte do problema
+
+Depois de escrever o acima, corrigi duas coisas e reexecutei. Os números da
+tabela principal (Haiku 22,2%) vinham de um protocolo que perdia trabalho.
+
+**1. O worker não entregava.** O protocolo mandava analisar e canalizar o
+resultado num comando só (`echo '{...}' | jev verify -`). O subagente do Haiku
+gastou 15 turnos analisando e NUNCA rodou o comando, em 2 de 3 execuções —
+chegou a conferir se o `cli.mjs` existia e voltou a investigar. Não é erro de
+escape: modelo fraco não converge da análise para a entrega. Como era o
+`verify` que gravava os achados, a análise inteira evaporava.
+
+Correção em dois lugares: o worker só GRAVA `.jev/findings.json` (ferramenta
+nativa, sem shell), e a triagem passou a rodar no **hook** (`src/triage.mjs`),
+que é o único ponto do fluxo cuja execução não depende do modelo obedecer.
+
+**2. Minha primeira correção causou regressão.** Ao acrescentar "grave ASSIM
+QUE tiver os achados, antes de qualquer verificação adicional", o worker caiu
+para **exatamente 3 turnos em 3 de 3 execuções**. Consistência desse nível não
+é variância — a frase mandava parar de investigar. Investigar e entregar viraram
+ações separadas.
+
+### Efeito medido, mesmo modelo
+
+| protocolo | n | turnos | recall | por severidade | achou o HIGH | custo |
+| --- | --- | --- | --- | --- | --- | --- |
+| pipe (original) | 1 | 14 | 11,1% | 13,9% | 0/1 | $0,26 |
+| arquivo, v1 (pressa) | 3 | 3 | 12,3% | 14,8% | 0/3 | $0,15 |
+| **arquivo, v2 (investigar)** | 3 | 24 | **13,6%** | **17,6%** | **1/3** | $0,36 |
+
+O ganho aparece mais na severidade que na contagem, que é o que importa: com o
+protocolo v2 um Haiku achou pela primeira vez o `sqlc não regenerado`. A
+instrução que mudou isso foi "rode o build e os testes quando isso decidir
+alguma coisa" — sem ela o modelo nunca olhava o build, então nunca via que o
+código não compila.
+
+**A conclusão principal não muda:** 13,6% contra 40% do Opus. O teto do modelo
+barato é real e o protocolo não o levanta.
+
+### Alucinação parece ser sintoma de investigação rasa
+
+As duas alucinações que este projeto já viu — `assertAppError não está
+definida` e `stubUserLookup type not defined` — saíram das execuções rasas. A
+execução de 36 turnos não produziu nenhuma.
+
+Se isso se sustentar (n pequeno), a defesa principal contra alucinação é
+**fazer o modelo olhar o código**, e a camada de verificação é rede para o
+resíduo — não o contrário.
+
+### A refutação determinística
+
+Implementada em `src/claims.mjs` a partir do diagnóstico "acerta o fato, erra a
+composição": se o achado afirma que X não existe e X está DEFINIDO no repo, o
+achado é falso por fato, com arquivo e linha como prova. Sem probabilidade,
+sem chamada de rede.
+
+Estado: **2/2 alucinações conhecidas refutadas, 0 falsas refutações em 235
+achados reais** (`test/claims-refutacao.mjs`).
+
+Quatro versões erradas antes de acertar, todas pegas pela regressão contra os
+achados já coletados — que é o único jeito honesto de medir falsa refutação.
+
 ## Próximo passo que os dados apontam
 
 O diagnóstico — fato certo, composição errada — é uma hipótese testável e

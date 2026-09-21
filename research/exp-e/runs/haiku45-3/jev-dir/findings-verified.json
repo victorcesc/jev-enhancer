@@ -1,0 +1,99 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 2,
+    "needs_context": 4
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 676,
+      "symbol": "numericFloat",
+      "issue": "Silencia falhas de conversão de pgtype.Numeric, retornando 0.0 sem logging; pode levar a valores incorretos em produção sem qualquer alerta",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.77,
+        "severity_score": 1.9,
+        "evidence_sufficient": 0.77
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.77)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1075,
+      "symbol": "writeFiadoFailure",
+      "issue": "Erros não-AppError são retornados com mensagem genérica sem logging do erro original; dificulta debug e observabilidade em produção",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.74,
+        "severity_score": 1.34,
+        "evidence_sufficient": 0.82
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.74)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "symbol": "TestListPending_success",
+      "issue": "Gap de cobertura: sem teste para falha de conversão de pgtype.Numeric em numericFloat, sem teste para retorno 0.0 silencioso",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.42,
+        "severity_score": 1.03,
+        "evidence_sufficient": 0.75
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.42) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 67,
+      "symbol": "TestCustomerFiado_success",
+      "issue": "Gap de cobertura: sem teste para erro não-AppError vindo do serviço ListPending para validar logging/observabilidade em writeFiadoFailure",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.4,
+        "severity_score": 0.99,
+        "evidence_sufficient": 0.69
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.40) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 261,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Gap de cobertura: nenhum seed de sale com status ou campos que pudessem resultar em Numeric NULL ou conversão mal-formada; todos os casos de sucesso",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.34,
+        "severity_score": 0.95,
+        "evidence_sufficient": 0.71
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.34) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 659,
+      "symbol": "ListPending",
+      "issue": "Ignora o bool de validação ao chamar timestamptzTime(row.SaleDate) com blank identifier; embora schema garanta NOT NULL, é má prática ignorar valores de retorno sem justificativa",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.26,
+        "severity_score": 0.52,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.26) mas nada no código contradiz"
+    }
+  ]
+}

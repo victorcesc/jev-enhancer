@@ -1,98 +1,99 @@
 {
   "mode": "jev",
   "verdicts": {
-    "confirmed": 6
+    "confirmed": 4,
+    "needs_context": 2
   },
   "findings": [
     {
-      "file": "packages/api-go/internal/handler/fiado_router_test.go",
-      "line": 1176,
-      "symbol": "newFiadoRouter",
-      "issue": "stubUserLookup type not defined; test will not compile",
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "Conversion failures (err != nil) silently return 0.0 without logging. For financial data (fiado = debt amounts), corrupted numeric values become 0, risking accounting inconsistencies. SQL query uses COALESCE to prevent NULL, but function doesn't defend against conversion errors.",
       "kind": "bug",
       "severity": "high",
       "jev": {
-        "valid": 0.72,
-        "severity_score": 1.81,
-        "evidence_sufficient": 0.44
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.72)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 676,
-      "symbol": "numericFloat",
-      "issue": "Float64Value errors silently converted to 0.0 without logging; blocks debugging invalid numerics",
-      "kind": "bug",
-      "severity": "med",
-      "jev": {
-        "valid": 0.83,
-        "severity_score": 1.55,
-        "evidence_sufficient": 0.78
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.83)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 659,
-      "symbol": "ListPending",
-      "issue": "Boolean validity indicator from timestamptzTime ignored; zero time.Time used silently if sale_date NULL",
-      "kind": "bug",
-      "severity": "med",
-      "jev": {
-        "valid": 0.77,
-        "severity_score": 1.49,
-        "evidence_sufficient": 0.68
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.77)"
-    },
-    {
-      "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 1075,
-      "symbol": "writeFiadoFailure",
-      "issue": "Non-AppError exceptions converted to 500 INTERNAL_ERROR without logging original error; hides debug info in prod",
-      "kind": "bug",
-      "severity": "med",
-      "jev": {
-        "valid": 0.81,
-        "severity_score": 1.46,
+        "valid": 0.86,
+        "severity_score": 2.14,
         "evidence_sufficient": 0.73
       },
       "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.81)"
+      "reason": "Jev confirma (valid=0.86)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Non-AppError exceptions converted to generic 500 INTERNAL_ERROR without logging the underlying error. Violates AGENTS.md guideline to log at handler boundaries. If an unexpected error type occurs, it's silently swallowed with no production visibility.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 1.52,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.82)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "SaleDate validity check ignored with blank identifier (_). If SaleDate is NULL (schema should prevent, but defensive coding missing), time.Time{} (zero time) is returned to client without warning. No error propagation if timestamp is corrupt.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.59,
+        "severity_score": 1.13,
+        "evidence_sufficient": 0.69
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.59)"
     },
     {
       "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 771,
+      "line": 77,
       "symbol": "TestListPending_success",
-      "issue": "Gap: no test case for NULL or invalid sale_date; only tests valid timestamps",
+      "issue": "Test gap: stub rows all have SaleDate Valid=true. No coverage for NULL SaleDate or invalid timestamptz. Service code ignores the bool return from timestamptzTime(), masking data quality issues.",
       "kind": "rule",
       "severity": "low",
       "jev": {
-        "valid": 0.57,
-        "severity_score": 1.07,
-        "evidence_sufficient": 0.71
+        "valid": 0.63,
+        "severity_score": 1.02,
+        "evidence_sufficient": 0.74
       },
       "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.57)"
+      "reason": "Jev confirma (valid=0.63)"
     },
     {
-      "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 910,
-      "symbol": "TestListPending_storeFailures",
-      "issue": "Gap: does not test numericFloat conversion failures or invalid numeric values from database",
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 92,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Integration test seeds all sales with NOW() - interval (always valid SaleDate). No test case for edge case: corrupted/NULL numeric values, or timestamp edge cases. numericFloat() silently returns 0 on error, but error path untested.",
       "kind": "rule",
       "severity": "low",
       "jev": {
-        "valid": 0.55,
-        "severity_score": 1.05,
-        "evidence_sufficient": 0.64
+        "valid": 0.46,
+        "severity_score": 0.98,
+        "evidence_sufficient": 0.65
       },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.55)"
+      "verdict": "needs_context",
+      "reason": "caminho citado não foi encontrado no repositório"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 49,
+      "symbol": "CustomerFiado",
+      "issue": "httpx.WriteJSON error on line 49 silently ignored (_ =). If writing to response stream fails (client disconnects, I/O error), error is lost. Consistent with existing pattern (sync_response.go, auth_response.go) but violates defensive coding.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.48,
+        "severity_score": 0.87,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "needs_context",
+      "reason": "li sync_response.go, auth_response.go e continua inconclusivo"
     }
   ]
 }

@@ -1,42 +1,42 @@
 {
   "findings": [
     {
-      "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 1075,
-      "symbol": "writeFiadoFailure",
-      "issue": "Non-AppError exceptions are caught and logged as generic INTERNAL_ERROR without exposing the underlying error. Production debugging becomes difficult when unexpected errors occur.",
+      "file": "packages/api-go/cmd/server/main.go",
+      "line": 160,
+      "symbol": "MountFiado",
+      "issue": "sqlc code not generated: fiado.sql.go missing. queries (*db.Queries) does not implement PendingStore interface methods. Will not compile until sqlc is run.",
       "kind": "bug",
       "severity": "high"
     },
     {
       "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 676,
+      "line": 94,
       "symbol": "numericFloat",
-      "issue": "Numeric conversion errors and NULL values silently return 0.0 without logging. Masks data corruption or invalid database state.",
+      "issue": "Silently returns 0.0 on conversion error or NULL value without logging; inconsistent with integration test pattern which validates and fails. Masks data issues in production.",
       "kind": "bug",
       "severity": "med"
     },
     {
       "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 659,
-      "symbol": "ListPending",
-      "issue": "SaleDate.Valid flag is ignored; NULL dates silently become zero time.Time. Should log or handle explicitly.",
+      "line": 77,
+      "symbol": "timestamptzTime",
+      "issue": "Discards bool indicating timestamp validity. If NULL (should not happen per schema), zero time.Time used silently without indication of data integrity issue.",
       "kind": "bug",
       "severity": "med"
     },
     {
       "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 1062,
-      "symbol": "CustomerFiado",
-      "issue": "httpx.WriteJSON error is silently dropped. Response write failures go unnoticed.",
-      "kind": "bug",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Non-AppError exceptions silently masked as generic INTERNAL_ERROR without logging actual error. Violates AGENTS.md guidance: 'log at process or handler boundaries'. Impedes production debugging.",
+      "kind": "rule",
       "severity": "med"
     },
     {
       "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 771,
+      "line": 77,
       "symbol": "TestListPending_success",
-      "issue": "Missing test case: SaleDate.Valid=false (NULL). The handler ignores the valid flag on line 659.",
+      "issue": "No test case for NULL or invalid SaleDate (line 77 discards validity bool). Happy path only; error handling not exercised for timestamp conversion.",
       "kind": "rule",
       "severity": "low"
     },
@@ -44,15 +44,15 @@
       "file": "packages/api-go/internal/fiado/pending_test.go",
       "line": 771,
       "symbol": "TestListPending_success",
-      "issue": "Missing test case: numericFloat conversion failure (pgtype.Numeric with invalid data).",
+      "issue": "No test case for NULL or invalid NUMERIC values (total_paid, balance). numericFloat silent 0 return not exercised in tests.",
       "kind": "rule",
       "severity": "low"
     },
     {
-      "file": "packages/api-go/internal/handler/fiado_router_test.go",
-      "line": 1338,
-      "symbol": "TestCustomerFiado_serviceFailureIs500",
-      "issue": "Tests only AppError responses. Missing test for non-AppError panic/exception handling in writeFiadoFailure.",
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 234,
+      "symbol": "assertAppError",
+      "issue": "No test case for non-AppError thrown from service (writeFiadoFailure silent masking). Test coverage gap for handler error path.",
       "kind": "rule",
       "severity": "low"
     }

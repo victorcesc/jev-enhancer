@@ -6,109 +6,109 @@
   },
   "findings": [
     {
+      "file": "packages/api-go/cmd/server/main.go",
+      "line": 160,
+      "symbol": "MountFiado",
+      "issue": "sqlc code not generated: fiado.sql.go missing. queries (*db.Queries) does not implement PendingStore interface methods. Will not compile until sqlc is run.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.77,
+        "severity_score": 2.96,
+        "evidence_sufficient": 0.41
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.77)"
+    },
+    {
       "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 676,
+      "line": 94,
       "symbol": "numericFloat",
-      "issue": "Numeric conversion errors and NULL values silently return 0.0 without logging. Masks data corruption or invalid database state.",
+      "issue": "Silently returns 0.0 on conversion error or NULL value without logging; inconsistent with integration test pattern which validates and fails. Masks data issues in production.",
       "kind": "bug",
       "severity": "med",
       "jev": {
+        "valid": 0.84,
+        "severity_score": 1.9,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.84)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Non-AppError exceptions silently masked as generic INTERNAL_ERROR without logging actual error. Violates AGENTS.md guidance: 'log at process or handler boundaries'. Impedes production debugging.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
         "valid": 0.86,
-        "severity_score": 1.99,
-        "evidence_sufficient": 0.72
+        "severity_score": 1.65,
+        "evidence_sufficient": 0.73
       },
       "verdict": "confirmed",
       "reason": "Jev confirma (valid=0.86)"
     },
     {
-      "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 1075,
-      "symbol": "writeFiadoFailure",
-      "issue": "Non-AppError exceptions are caught and logged as generic INTERNAL_ERROR without exposing the underlying error. Production debugging becomes difficult when unexpected errors occur.",
-      "kind": "bug",
-      "severity": "high",
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "symbol": "TestListPending_success",
+      "issue": "No test case for NULL or invalid NUMERIC values (total_paid, balance). numericFloat silent 0 return not exercised in tests.",
+      "kind": "rule",
+      "severity": "low",
       "jev": {
-        "valid": 0.65,
-        "severity_score": 1.51,
-        "evidence_sufficient": 0.69
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.65)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 659,
-      "symbol": "ListPending",
-      "issue": "SaleDate.Valid flag is ignored; NULL dates silently become zero time.Time. Should log or handle explicitly.",
-      "kind": "bug",
-      "severity": "med",
-      "jev": {
-        "valid": 0.68,
-        "severity_score": 1.49,
+        "valid": 0.63,
+        "severity_score": 1.2,
         "evidence_sufficient": 0.62
       },
       "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.68)"
+      "reason": "Jev confirma (valid=0.63)"
     },
     {
-      "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 1062,
-      "symbol": "CustomerFiado",
-      "issue": "httpx.WriteJSON error is silently dropped. Response write failures go unnoticed.",
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 234,
+      "symbol": "assertAppError",
+      "issue": "No test case for non-AppError thrown from service (writeFiadoFailure silent masking). Test coverage gap for handler error path.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.49,
+        "severity_score": 1.09,
+        "evidence_sufficient": 0.55
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.49) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "timestamptzTime",
+      "issue": "Discards bool indicating timestamp validity. If NULL (should not happen per schema), zero time.Time used silently without indication of data integrity issue.",
       "kind": "bug",
       "severity": "med",
       "jev": {
-        "valid": 0.75,
-        "severity_score": 1.33,
-        "evidence_sufficient": 0.66
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.75)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 771,
-      "symbol": "TestListPending_success",
-      "issue": "Missing test case: numericFloat conversion failure (pgtype.Numeric with invalid data).",
-      "kind": "rule",
-      "severity": "low",
-      "jev": {
-        "valid": 0.58,
-        "severity_score": 1.16,
-        "evidence_sufficient": 0.63
-      },
-      "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.58)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 771,
-      "symbol": "TestListPending_success",
-      "issue": "Missing test case: SaleDate.Valid=false (NULL). The handler ignores the valid flag on line 659.",
-      "kind": "rule",
-      "severity": "low",
-      "jev": {
         "valid": 0.57,
-        "severity_score": 1.09,
-        "evidence_sufficient": 0.48
+        "severity_score": 1.04,
+        "evidence_sufficient": 0.7
       },
       "verdict": "confirmed",
       "reason": "Jev confirma (valid=0.57)"
     },
     {
-      "file": "packages/api-go/internal/handler/fiado_router_test.go",
-      "line": 1338,
-      "symbol": "TestCustomerFiado_serviceFailureIs500",
-      "issue": "Tests only AppError responses. Missing test for non-AppError panic/exception handling in writeFiadoFailure.",
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 77,
+      "symbol": "TestListPending_success",
+      "issue": "No test case for NULL or invalid SaleDate (line 77 discards validity bool). Happy path only; error handling not exercised for timestamp conversion.",
       "kind": "rule",
       "severity": "low",
       "jev": {
-        "valid": 0.45,
-        "severity_score": 1.03,
-        "evidence_sufficient": 0.59
+        "valid": 0.58,
+        "severity_score": 1.01,
+        "evidence_sufficient": 0.64
       },
-      "verdict": "needs_context",
-      "reason": "Jev duvida (valid=0.45) mas nada no código contradiz"
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.58)"
     }
   ]
 }

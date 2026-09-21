@@ -41,11 +41,29 @@ const halluc = {
 const r = refutaInexistencia(halluc, REPO);
 check(!!r, `alucinação refutada${r ? ` por ${r.file}:${r.line}` : ""}`);
 
+// Achados COLETADOS que são comprovadamente falsos — eu verifiquei os dois no
+// código. A premissa inicial deste teste ("tudo que foi coletado é real") caiu
+// quando o Haiku 4.5 passou a rodar: modelo fraco com investigação rasa
+// alucina, e o que ele produz fica nos mesmos arquivos que os achados bons.
+// Estes DEVEM ser refutados; contá-los como falha esconderia o acerto.
+const ALUCINACOES = new Map([
+  ["stubUserLookup", "auth_router_test.go:38 define o tipo"],
+  ["assertAppError", "pending_test.go:234 define a função"],
+]);
+const ehAlucinacao = (f) =>
+  [...ALUCINACOES.keys()].some((s) => `${f.symbol ?? ""} ${f.issue ?? ""}`.includes(s)) &&
+  /not\s+defined|n[aã]o\s+est[aá]\s+definid|not\s+declared/i.test(f.issue ?? "");
+
 // --- 2. nenhum achado real pode ser refutado -------------------------------
 let total = 0;
+let pegas = 0;
 let negacoes = 0;
 const refutados = [];
-for (const dir of ["exp-abc/runs", "exp-d/runs", "exp-e/runs"]) {
+// Inclui os arquivos: execução arquivada por bug de harness continua sendo
+// um review real, e é justamente onde moram as alucinações já observadas.
+for (const dir of ["exp-abc/runs", "exp-abc/archive", "exp-d/runs", "exp-d/archive",
+                   "exp-e/runs", "exp-e/archive/protocolo-pipe",
+                   "exp-e/archive/protocolo-arquivo-v1"]) {
   const base = path.join(HERE, "../research", dir);
   if (!existsSync(base)) continue;
   for (const rel of globSync("*/findings.json", { cwd: base })) {
@@ -55,11 +73,17 @@ for (const dir of ["exp-abc/runs", "exp-d/runs", "exp-e/runs"]) {
       if (!afirmaInexistencia(`${f.symbol ?? ""} ${f.issue ?? ""}`)) continue;
       negacoes++;
       const ref = refutaInexistencia(f, REPO);
-      if (ref) refutados.push({ rel, symbol: f.symbol, prova: `${ref.symbol} @ ${ref.file}:${ref.line}` });
+      if (!ref) continue;
+      if (ehAlucinacao(f)) {
+        pegas++;
+        console.log(`  pegou alucinação [${rel}] ${f.symbol} -> ${ref.symbol} @ ${ref.file}:${ref.line}`);
+        continue;
+      }
+      refutados.push({ rel, symbol: f.symbol, prova: `${ref.symbol} @ ${ref.file}:${ref.line}` });
     }
   }
 }
-console.log(`\nachados analisados: ${total} | afirmam inexistência: ${negacoes}`);
+console.log(`\nachados analisados: ${total} | afirmam inexistência: ${negacoes} | alucinações pegas: ${pegas}`);
 for (const x of refutados) console.log(`  FALSA REFUTAÇÃO [${x.rel}] ${x.symbol} -> ${x.prova}`);
 check(refutados.length === 0, `nenhum achado real refutado (${refutados.length} refutações falsas)`);
 

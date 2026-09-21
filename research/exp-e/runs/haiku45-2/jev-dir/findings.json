@@ -1,1 +1,52 @@
-{"findings":[{"file":"packages/api-go/internal/handler/fiado_router_test.go","line":1176,"symbol":"newFiadoRouter","issue":"stubUserLookup type not defined; test will not compile","kind":"bug","severity":"high"},{"file":"packages/api-go/internal/handler/fiado.go","line":1075,"symbol":"writeFiadoFailure","issue":"Non-AppError exceptions converted to 500 INTERNAL_ERROR without logging original error; hides debug info in prod","kind":"bug","severity":"med"},{"file":"packages/api-go/internal/fiado/pending.go","line":659,"symbol":"ListPending","issue":"Boolean validity indicator from timestamptzTime ignored; zero time.Time used silently if sale_date NULL","kind":"bug","severity":"med"},{"file":"packages/api-go/internal/fiado/pending.go","line":676,"symbol":"numericFloat","issue":"Float64Value errors silently converted to 0.0 without logging; blocks debugging invalid numerics","kind":"bug","severity":"med"},{"file":"packages/api-go/internal/fiado/pending_test.go","line":771,"symbol":"TestListPending_success","issue":"Gap: no test case for NULL or invalid sale_date; only tests valid timestamps","kind":"rule","severity":"low"},{"file":"packages/api-go/internal/fiado/pending_test.go","line":910,"symbol":"TestListPending_storeFailures","issue":"Gap: does not test numericFloat conversion failures or invalid numeric values from database","kind":"rule","severity":"low"}]}
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Non-AppError exceptions converted to generic 500 INTERNAL_ERROR without logging the underlying error. Violates AGENTS.md guideline to log at handler boundaries. If an unexpected error type occurs, it's silently swallowed with no production visibility.",
+      "kind": "bug",
+      "severity": "high"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "Conversion failures (err != nil) silently return 0.0 without logging. For financial data (fiado = debt amounts), corrupted numeric values become 0, risking accounting inconsistencies. SQL query uses COALESCE to prevent NULL, but function doesn't defend against conversion errors.",
+      "kind": "bug",
+      "severity": "high"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "SaleDate validity check ignored with blank identifier (_). If SaleDate is NULL (schema should prevent, but defensive coding missing), time.Time{} (zero time) is returned to client without warning. No error propagation if timestamp is corrupt.",
+      "kind": "bug",
+      "severity": "med"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 77,
+      "symbol": "TestListPending_success",
+      "issue": "Test gap: stub rows all have SaleDate Valid=true. No coverage for NULL SaleDate or invalid timestamptz. Service code ignores the bool return from timestamptzTime(), masking data quality issues.",
+      "kind": "rule",
+      "severity": "low"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 92,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Integration test seeds all sales with NOW() - interval (always valid SaleDate). No test case for edge case: corrupted/NULL numeric values, or timestamp edge cases. numericFloat() silently returns 0 on error, but error path untested.",
+      "kind": "rule",
+      "severity": "low"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 49,
+      "symbol": "CustomerFiado",
+      "issue": "httpx.WriteJSON error on line 49 silently ignored (_ =). If writing to response stream fails (client disconnects, I/O error), error is lost. Consistent with existing pattern (sync_response.go, auth_response.go) but violates defensive coding.",
+      "kind": "rule",
+      "severity": "low"
+    }
+  ]
+}

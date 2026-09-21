@@ -33,9 +33,13 @@ const NEGACOES = [
   /(?:n[aã]o)\s+(?:est[aá]|foi|[eé]|s[aã]o|est[aã]o)\s+(?:definid\w*|declarad\w*|implementad\w*|criad\w*)/gi,
   /(?:n[aã]o)\s+(?:existe|existem|cont[eé]m)\b/gi,
   /\bem lugar nenhum\b/gi,
-  /\b(?:is|are)\s+not\s+defined\b/gi,
+  // Sem exigir cópula: "stubUserLookup type not defined" escapava do padrão
+  // `is/are not defined` e a alucinação passava. Modelo fraco escreve
+  // telegráfico, então a regex não pode depender de frase bem formada.
+  /\bnot\s+(?:defined|declared|implemented|present)\b/gi,
   /\bdoes\s+not\s+exist\b/gi,
   /\bnever\s+(?:defined|declared)\b/gi,
+  /\b(?:n[aã]o\s+)?(?:definid[oa]|declarad[oa])\s+em\s+lugar\s+nenhum\b/gi,
 ];
 
 /** O achado afirma que alguma coisa NÃO existe? */
@@ -109,15 +113,19 @@ export const simbolosNegados = (finding) => {
     return nome;
   };
 
+  // Varre até 3 tokens de cada lado, não apenas o vizinho imediato: em
+  // "stubUserLookup type not defined" a palavra `type` fica entre o sujeito e
+  // a negação, e olhar só um token deixava a alucinação passar. Os 3 tokens
+  // continuam limitados por distância, então não vira a janela larga que
+  // falhou antes.
+  const VIZINHOS = 3;
   const out = new Set();
   for (const n of negacoes) {
-    const antes = tokens.filter((t) => t.fim <= n.ini && !RUIDO.test(t.bruto)).pop();
-    const depois = tokens.find((t) => t.ini >= n.fim && !RUIDO.test(t.bruto));
-    for (const t of [antes, depois]) {
-      // adjacência: no máximo ~25 chars de distância da negação
-      if (!t) continue;
+    const antes = tokens.filter((t) => t.fim <= n.ini).slice(-VIZINHOS).reverse();
+    const depois = tokens.filter((t) => t.ini >= n.fim).slice(0, VIZINHOS);
+    for (const t of [...antes, ...depois]) {
       const dist = t.fim <= n.ini ? n.ini - t.fim : t.ini - n.fim;
-      if (dist > 25) continue;
+      if (dist > 30) continue;
       const nome = aceita(t.bruto);
       if (nome) out.add(nome);
     }

@@ -1,0 +1,813 @@
+[
+ {
+  "id": "db-1",
+  "kind": "db",
+  "subject": "packages/api-go/query/fiado.sql",
+  "question": "O arquivo SQL packages/api-go/query/fiado.sql mudou. O código gerado correspondente existe e está atualizado?",
+  "evidence": [
+   "3 query(s) declarada(s): GetCustomerByUserIDAndID, ListPendingFiadoSalesByCustomer, SummarizePendingFiadoSalesByCustomer",
+   "o repo usa sqlc (sqlc.yaml presente)",
+   "artefato fiado.sql.go NÃO encontrado no repo"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 1
+ },
+ {
+  "id": "db-2",
+  "kind": "db",
+  "subject": "GetCustomerByUserIDAndID",
+  "question": "A query GetCustomerByUserIDAndID é chamada pelo código. Os tipos gerados que ela exige existem?",
+  "evidence": [
+   "declarada em packages/api-go/query/fiado.sql",
+   "nome referenciado em outro arquivo do repo"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 1
+ },
+ {
+  "id": "db-3",
+  "kind": "db",
+  "subject": "ListPendingFiadoSalesByCustomer",
+  "question": "A query ListPendingFiadoSalesByCustomer é chamada pelo código. Os tipos gerados que ela exige existem?",
+  "evidence": [
+   "declarada em packages/api-go/query/fiado.sql",
+   "nome referenciado em outro arquivo do repo"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 1
+ },
+ {
+  "id": "db-4",
+  "kind": "db",
+  "subject": "SummarizePendingFiadoSalesByCustomer",
+  "question": "A query SummarizePendingFiadoSalesByCustomer é chamada pelo código. Os tipos gerados que ela exige existem?",
+  "evidence": [
+   "declarada em packages/api-go/query/fiado.sql",
+   "nome referenciado em outro arquivo do repo"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 1
+ },
+ {
+  "id": "db-5",
+  "kind": "db",
+  "subject": "payments",
+  "question": "A subquery sobre payments agrega sem WHERE. Ela deveria ser filtrada por tenant/linha?",
+  "evidence": [
+   "trecho: ( SELECT sale_id, SUM(amount) AS total_paid FROM payments GROUP BY sale_id )",
+   "não há predicado dentro da subquery"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 1
+ },
+ {
+  "id": "errors-7",
+  "kind": "errors",
+  "subject": "timestamptzTime",
+  "question": "O segundo retorno de timestamptzTime é descartado com `_`. Ele carrega informação que importa?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending.go:77",
+   "saleDate, _ := timestamptzTime(row.SaleDate)"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 77
+ },
+ {
+  "id": "errors-8",
+  "kind": "errors",
+  "subject": "newFiadoRouter",
+  "question": "O segundo retorno de newFiadoRouter é descartado com `_`. Ele carrega informação que importa?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go:203",
+   "router, _ := newFiadoRouter(t, &stubPendingFiadoLister{})"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 203
+ },
+ {
+  "id": "errors-9",
+  "kind": "errors",
+  "subject": "packages/api-go/internal/fiado/page.go",
+  "question": "Este caminho de erro devolve valor-zero sem wrap (`%w`) e sem log. O erro deveria propagar?",
+  "evidence": [
+   "packages/api-go/internal/fiado/page.go:35",
+   "if err != nil || value < 1 {",
+   "return 0, apperror.New( \t\t\t\"Parâmetro \"+name+\" inválido\", \t\t\thttp.StatusBadRequest,"
+  ],
+  "file": "packages/api-go/internal/fiado/page.go",
+  "line": 35
+ },
+ {
+  "id": "errors-10",
+  "kind": "errors",
+  "subject": "packages/api-go/internal/fiado/pending.go",
+  "question": "Este caminho de erro devolve valor-zero sem wrap (`%w`) e sem log. O erro deveria propagar?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending.go:96",
+   "if err != nil || !f.Valid {",
+   "return 0 \t} \treturn f.Float64"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 96
+ },
+ {
+  "id": "errors-11",
+  "kind": "errors",
+  "subject": "packages/api-go/internal/fiado/pending.go",
+  "question": "Este caminho de erro devolve valor-zero sem wrap (`%w`) e sem log. O erro deveria propagar?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending.go:103",
+   "if !t.Valid {",
+   "return time.Time{}, false \t} \treturn t.Time, true"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 103
+ },
+ {
+  "id": "errors-12",
+  "kind": "errors",
+  "subject": "packages/api-go/internal/handler/fiado.go",
+  "question": "Este caminho de erro devolve valor-zero sem wrap (`%w`) e sem log. O erro deveria propagar?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado.go:56",
+   "if err != nil || value < 1 {",
+   "return 0, apperror.New(\"ID do cliente inválido\", http.StatusBadRequest, \"VALIDATION_ERROR\""
+  ],
+  "file": "packages/api-go/internal/handler/fiado.go",
+  "line": 56
+ },
+ {
+  "id": "contracts-13",
+  "kind": "contracts",
+  "subject": "int32",
+  "question": "Conversão para int32 de uma expressão calculada, sem checagem de faixa. O invariante que a torna segura é imposto pelo tipo?",
+  "evidence": [
+   "packages/api-go/internal/fiado/types.go:56",
+   "return int32((p.Number - 1) * p.Limit)"
+  ],
+  "file": "packages/api-go/internal/fiado/types.go",
+  "line": 56
+ },
+ {
+  "id": "behaviour-14",
+  "kind": "behaviour",
+  "subject": "numericFloat",
+  "question": "numericFloat é definido aqui e também em packages/api-go/internal/fiado/pending.go. É duplicação que deveria ser compartilhada?",
+  "evidence": [
+   "novo em packages/api-go/internal/db/fiado_integration_test.go:19",
+   "também em: packages/api-go/internal/fiado/pending.go, packages/api-go/internal/sync/pgconv.go"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 19
+ },
+ {
+  "id": "behaviour-15",
+  "kind": "behaviour",
+  "subject": "numericFloat",
+  "question": "numericFloat é definido aqui e também em packages/api-go/internal/db/fiado_integration_test.go. É duplicação que deveria ser compartilhada?",
+  "evidence": [
+   "novo em packages/api-go/internal/fiado/pending.go:94",
+   "também em: packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/sync/pgconv.go"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 94
+ },
+ {
+  "id": "behaviour-16",
+  "kind": "behaviour",
+  "subject": "timestamptzTime",
+  "question": "timestamptzTime é definido aqui e também em packages/api-go/internal/sync/pgconv.go. É duplicação que deveria ser compartilhada?",
+  "evidence": [
+   "novo em packages/api-go/internal/fiado/pending.go:102",
+   "também em: packages/api-go/internal/sync/pgconv.go"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 102
+ },
+ {
+  "id": "behaviour-17",
+  "kind": "behaviour",
+  "subject": "mustNumeric",
+  "question": "mustNumeric é definido aqui e também em packages/api-go/internal/sync/initial_test.go. É duplicação que deveria ser compartilhada?",
+  "evidence": [
+   "novo em packages/api-go/internal/fiado/pending_test.go:55",
+   "também em: packages/api-go/internal/sync/initial_test.go"
+  ],
+  "file": "packages/api-go/internal/fiado/pending_test.go",
+  "line": 55
+ },
+ {
+  "id": "behaviour-18",
+  "kind": "behaviour",
+  "subject": "FailureResponse",
+  "question": "FailureResponse é definido aqui e também em packages/api-go/internal/sync/types.go. É duplicação que deveria ser compartilhada?",
+  "evidence": [
+   "novo em packages/api-go/internal/fiado/types.go:42",
+   "também em: packages/api-go/internal/sync/types.go"
+  ],
+  "file": "packages/api-go/internal/fiado/types.go",
+  "line": 42
+ },
+ {
+  "id": "auth-19",
+  "kind": "auth",
+  "subject": "/api/v1/customers/",
+  "question": "A rota/prefixo /api/v1/customers/ foi adicionada. Ela está sob a mesma política de autenticação das rotas vizinhas?",
+  "evidence": [
+   "packages/api-go/internal/middleware/routes.go:22",
+   "vizinhas no mesmo arquivo: /health, /auth/register, /auth/login, /auth/generate-registration-key, /sync/",
+   "é a ÚNICA versionada (/api/vN) entre as vizinhas",
+   "termina em barra: cobre um namespace inteiro, não uma rota específica"
+  ],
+  "file": "packages/api-go/internal/middleware/routes.go",
+  "line": 22
+ },
+ {
+  "id": "auth-20",
+  "kind": "auth",
+  "subject": "/api/v1/customers",
+  "question": "A rota/prefixo /api/v1/customers foi adicionada. Ela está sob a mesma política de autenticação das rotas vizinhas?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router.go:20",
+   "vizinhas no mesmo arquivo: /{id}/fiado",
+   "é a ÚNICA versionada (/api/vN) entre as vizinhas"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router.go",
+  "line": 20
+ },
+ {
+  "id": "auth-21",
+  "kind": "auth",
+  "subject": "/{id}/fiado",
+  "question": "A rota/prefixo /{id}/fiado foi adicionada. Ela está sob a mesma política de autenticação das rotas vizinhas?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router.go:22",
+   "vizinhas no mesmo arquivo: /api/v1/customers"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router.go",
+  "line": 22
+ },
+ {
+  "id": "tests-22",
+  "kind": "tests",
+  "subject": "suffix",
+  "question": "suffix é declarado no teste e nunca aparece numa asserção. O teste assegura o que aparenta?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go:37",
+   "suffix := time.Now().UnixNano() % 1_000_000_000_000",
+   "ocorrências no arquivo: 5"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 37
+ },
+ {
+  "id": "tests-23",
+  "kind": "tests",
+  "subject": "seedSale",
+  "question": "seedSale é declarado no teste e nunca aparece numa asserção. O teste assegura o que aparenta?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go:71",
+   "seedSale := func(name string, daysAgo int, total string, isCredit bool, status string, payments ...string) int",
+   "ocorrências no arquivo: 6"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 71
+ },
+ {
+  "id": "tests-24",
+  "kind": "tests",
+  "subject": "boom",
+  "question": "boom é declarado no teste e nunca aparece numa asserção. O teste assegura o que aparenta?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending_test.go:217",
+   "boom := errors.New(\"boom\")",
+   "ocorrências no arquivo: 5"
+  ],
+  "file": "packages/api-go/internal/fiado/pending_test.go",
+  "line": 217
+ },
+ {
+  "id": "tests-25",
+  "kind": "tests",
+  "subject": "issuer",
+  "question": "issuer é declarado no teste e nunca aparece numa asserção. O teste assegura o que aparenta?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go:41",
+   "issuer := auth.NewTestTokenIssuer()",
+   "ocorrências no arquivo: 3"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 41
+ },
+ {
+  "id": "tests-26",
+  "kind": "tests",
+  "subject": "saleDate",
+  "question": "saleDate é declarado no teste e nunca aparece numa asserção. O teste assegura o que aparenta?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go:68",
+   "saleDate := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)",
+   "ocorrências no arquivo: 2"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 68
+ },
+ {
+  "id": "tests-27",
+  "kind": "tests",
+  "subject": "testutil.OpenDB",
+  "question": "testutil.OpenDB pode chamar t.Skip. O que este teste cobre deixa de ser coberto quando ele pula?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go",
+   "packages/api-go/internal/testutil/db_integration.go contém t.Skip"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 1
+ },
+ {
+  "id": "tests-28",
+  "kind": "tests",
+  "subject": "UNAUTHENTICATED",
+  "question": "O ramo que produz UNAUTHENTICATED foi adicionado e nenhum teste menciona esse código. Ele é alcançável e está coberto?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado.go:27",
+   "writeFiadoFailure(w, apperror.New(\"Usuário não autenticado\", http.StatusUnauthorized, \"UNAUTHENTICATED\"))",
+   "\"UNAUTHENTICATED\" não aparece em nenhum arquivo _test"
+  ],
+  "file": "packages/api-go/internal/handler/fiado.go",
+  "line": 27
+ },
+ {
+  "id": "db-29",
+  "kind": "db",
+  "subject": "packages/api-go/internal/fiado/pending.go",
+  "question": "3 chamadas ao banco na mesma operação, sem transação. Elas precisam de snapshot consistente?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending.go",
+   "linha 35: if _, err := s.store.GetCustomerByUserIDAndID(ctx, db.GetCustomerByUse",
+   "linha 45: summary, err := s.store.SummarizePendingFiadoSalesByCustomer(ctx, db.S",
+   "linha 66: rows, err := s.store.ListPendingFiadoSalesByCustomer(ctx, db.ListPendi"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 35
+ },
+ {
+  "id": "behaviour-30",
+  "kind": "behaviour",
+  "subject": "AGENTS.md",
+  "question": "Este comentário afirma paridade com outra implementação. As duas de fato concordam?",
+  "evidence": [
+   "AGENTS.md:76",
+   "## Desktop Guidelines"
+  ],
+  "file": "AGENTS.md",
+  "line": 76
+ },
+ {
+  "id": "behaviour-31",
+  "kind": "behaviour",
+  "subject": "packages/api-go/internal/handler/fiado_router_test.go",
+  "question": "Este comentário afirma paridade com outra implementação. As duas de fato concordam?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go:105",
+   "// The JSON must carry the keys the desktop client reads, in snake_case."
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 105
+ },
+ {
+  "id": "behaviour-32",
+  "kind": "behaviour",
+  "subject": "packages/api-go/query/fiado.sql",
+  "question": "Este comentário afirma paridade com outra implementação. As duas de fato concordam?",
+  "evidence": [
+   "packages/api-go/query/fiado.sql:2",
+   "-- Paridade com SaleRepository::find_pending_credit_sales_by_customer (desktop):"
+  ],
+  "file": "packages/api-go/query/fiado.sql",
+  "line": 2
+ },
+ {
+  "id": "repo_rules-33",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Desktop env values must use Vite prefixes, for example `VITE_API_URL` or the existing `VITE_API_BASE_URL` usage.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-34",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Never commit real `.env` files, tokens, keys, API credentials, database dumps, or customer fiscal data.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-35",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Prefer standard library packages before adding dependencies, especially `net/http`, `context`, and `log/slog`.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-36",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Use table-driven tests for pure logic and `httptest` for HTTP behavior.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-37",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Do not introduce browser-only APIs in code that must run inside the Tauri backend.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-38",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Tauri/Rust backend change: run `cargo check` from `packages/desktop`; use `cargo test` when tests exist or behavior is covered.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-39",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Go DB/query/migration change: run `make -C packages/api-go sqlc`, then `make -C packages/api-go test`; use integration tests when database behavior changed.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-40",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Keep changes minimal and use existing libraries/patterns first.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-41",
+  "kind": "repo_rules",
+  "subject": "AGENTS.md",
+  "question": "O código novo viola esta regra do repositório? \"Prefer small, targeted changes over broad rewrites.\"",
+  "evidence": [
+   "fonte: AGENTS.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": "AGENTS.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-42",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Canonical conventions for this repository. Prefer these over ad-hoc style.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-43",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"`go.mod` declares the minimum Go version for the module; use current stable locally.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-44",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Prefer `net/http`, `context`, `log/slog`, and the standard library before pulling dependencies.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-45",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Every function that performs or may perform network I/O must accept `context.Context` as its **first parameter**, conventionally named `ctx`.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-46",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Use `context.WithTimeout` for single operations; respect `ctx.Err()` in long loops.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-47",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Do not use blank imports or `_` to discard errors from I/O.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-48",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Wrap with `%w` when the caller should inspect causes; use `fmt.Errorf(\"op: %w\", err)`.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-49",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Construct `http.Client` with explicit `Timeout` or use `http.NewRequestWithContext` with a derived context deadline.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-50",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Read secrets from the environment (see [`.env.example`](../.env.example)). Never commit tokens or API keys.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-51",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Use `log/slog` with structured keys (`slog.Info(\"msg\", \"key\", value)`).\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-52",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Use `net/http/httptest` for HTTP-dependent clients.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-53",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Variable names must be descriptive and communicate intent clearly in their scope.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-54",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Avoid **single-letter** names and vague placeholders (`v`, `x`, `tmp`, `n` as “some number”) except where Go convention is universal and scope is tiny: `ctx` for `context.Context`, `err` for errors, `i`/`j`/`k` in short index loops, `t` for `*testing.T`, `b` for `*testing.B`, `w`/`r` for `http.ResponseWriter` / `*http.Request`.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "repo_rules-55",
+  "kind": "repo_rules",
+  "subject": ".cursor/rules/RULES.md",
+  "question": "O código novo viola esta regra do repositório? \"Short **words** are fine when the meaning is obvious (`key`, `ok`, `seen`, `body`)—the goal is to ban *cryptic* one-letter names, not to require multi-word identifiers everywhere.\"",
+  "evidence": [
+   "fonte: .cursor/rules/RULES.md",
+   "arquivos tocados: packages/api-go/cmd/server/main.go, packages/api-go/internal/middleware/apikey_test.go, packages/api-go/internal/middleware/routes.go, packages/api-go/internal/db/fiado_integration_test.go, packages/api-go/internal/fiado/page.go"
+  ],
+  "file": ".cursor/rules/RULES.md",
+  "line": 0
+ },
+ {
+  "id": "tests-56",
+  "kind": "tests",
+  "subject": "ID: customerID, UserID: userID,",
+  "question": "Este caso de teste omite CustomerID, que a maioria dos casos irmãos declara. A asserção correspondente é pulada?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go",
+   "caso: ID: customerID, UserID: userID,",
+   "campos ausentes: CustomerID",
+   "presentes: ID, UserID"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 0
+ },
+ {
+  "id": "tests-57",
+  "kind": "tests",
+  "subject": "ID: customerID, UserID: otherUserID,",
+  "question": "Este caso de teste omite CustomerID, que a maioria dos casos irmãos declara. A asserção correspondente é pulada?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go",
+   "caso: ID: customerID, UserID: otherUserID,",
+   "campos ausentes: CustomerID",
+   "presentes: ID, UserID"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 0
+ },
+ {
+  "id": "tests-58",
+  "kind": "tests",
+  "subject": "SaleID: 11, Data: saleDate, ValorOrigina",
+  "question": "Este caso de teste omite Limit, que a maioria dos casos irmãos declara. A asserção correspondente é pulada?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go",
+   "caso: SaleID: 11, Data: saleDate, ValorOrigina",
+   "campos ausentes: Limit",
+   "presentes: SaleID, Data, ValorOriginal, ValorPago, Saldo"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 0
+ },
+ {
+  "id": "tests-59",
+  "kind": "tests",
+  "subject": "SaleID: 11, Data: time.Now(), ValorOrigi",
+  "question": "Este caso de teste omite Limit, que a maioria dos casos irmãos declara. A asserção correspondente é pulada?",
+  "evidence": [
+   "packages/api-go/internal/handler/fiado_router_test.go",
+   "caso: SaleID: 11, Data: time.Now(), ValorOrigi",
+   "campos ausentes: Limit",
+   "presentes: SaleID, Data, ValorOriginal, ValorPago, Saldo"
+  ],
+  "file": "packages/api-go/internal/handler/fiado_router_test.go",
+  "line": 0
+ },
+ {
+  "id": "tests-60",
+  "kind": "tests",
+  "subject": "out.Data",
+  "question": "O teste assere 2 elementos em out.Data mas só inspeciona índice 0. Os demais são comparados?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending_test.go",
+   "len(out.Data) != 2",
+   "índices inspecionados: 0"
+  ],
+  "file": "packages/api-go/internal/fiado/pending_test.go",
+  "line": 0
+ },
+ {
+  "id": "tests-61",
+  "kind": "tests",
+  "subject": "productID",
+  "question": "productID é declarado e aparece 2x no teste — provavelmente semeado e nunca lido. O setup é morto?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go:63",
+   "var productID int32",
+   "ocorrências: 2"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 63
+ },
+ {
+  "id": "db-62",
+  "kind": "db",
+  "subject": "GetCustomerByUserIDAndID",
+  "question": "O resultado de GetCustomerByUserIDAndID é descartado com `_`; só o erro é usado. A query precisa trazer tudo o que traz?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending.go:35",
+   "if _, err := s.store.GetCustomerByUserIDAndID(ctx, db.GetCustomerByUserIDAndIDParams{",
+   "a query declara ~10 coluna(s)"
+  ],
+  "file": "packages/api-go/internal/fiado/pending.go",
+  "line": 35
+ },
+ {
+  "id": "tests-63",
+  "kind": "tests",
+  "subject": "// Seeded sales, newest first: only \"abe",
+  "question": "Este comentário promete um comportamento. O teste realmente o exercita, ou só declara os dados?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go:70",
+   "// Seeded sales, newest first: only \"aberta\" and \"parcial\" are open fiado.",
+   "identificadores ao redor: seedSale, isCredit"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 70
+ },
+ {
+  "id": "tests-64",
+  "kind": "tests",
+  "subject": "// Same customer id must not match anoth",
+  "question": "Este comentário promete um comportamento. O teste realmente o exercita, ou só declara os dados?",
+  "evidence": [
+   "packages/api-go/internal/db/fiado_integration_test.go:98",
+   "// Same customer id must not match another user's sales.",
+   "identificadores ao redor: seedSale, otherCustomerID, otherUserID"
+  ],
+  "file": "packages/api-go/internal/db/fiado_integration_test.go",
+  "line": 98
+ },
+ {
+  "id": "tests-65",
+  "kind": "tests",
+  "subject": "// total_devido must cover every open sa",
+  "question": "Este comentário promete um comportamento. O teste realmente o exercita, ou só declara os dados?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending_test.go:133",
+   "// total_devido must cover every open sale, not only the ones on the requested page.",
+   "identificadores ao redor: stubStore, knownCustomer, mustNumeric"
+  ],
+  "file": "packages/api-go/internal/fiado/pending_test.go",
+  "line": 133
+ },
+ {
+  "id": "tests-66",
+  "kind": "tests",
+  "subject": "// A customer owned by another user must",
+  "question": "Este comentário promete um comportamento. O teste realmente o exercita, ou só declara os dados?",
+  "evidence": [
+   "packages/api-go/internal/fiado/pending_test.go:206",
+   "// A customer owned by another user must not leak: the query filters by user_id.",
+   "identificadores ao redor: testUserID, defaultPage, assertAppError, stubStore, knownCustomer"
+  ],
+  "file": "packages/api-go/internal/fiado/pending_test.go",
+  "line": 206
+ }
+]

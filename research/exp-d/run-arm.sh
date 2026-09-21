@@ -102,20 +102,25 @@ done
 python3 - "$OUT" "$REPO" <<'PY'
 import json, os, sys
 out, repo = sys.argv[1], sys.argv[2]
-info = {"stop_blocks": 0, "trigger": "desconhecido"}
+info = {"stop_blocks": 0, "trigger": "desconhecido", "verificou": False}
 try:
     for line in open(os.path.join(repo, ".jev", "runs.jsonl")):
         d = json.loads(line)
-        if d.get("stage") == "fallback" and d.get("status") == "completed":
+        stage, status = d.get("stage"), d.get("status")
+        # O hook LEGADO (d2) grava sem `stage`; o fallback novo grava
+        # stage="fallback". Os dois contam como bloqueio do Stop.
+        if status == "completed" and stage in (None, "fallback"):
             info["stop_blocks"] += 1
-        if d.get("stage") == "review" and d.get("trigger") == "agent":
+        if stage == "review" and d.get("trigger") == "agent":
             info["trigger"] = "agente (Definition of Done)"
+        if stage == "verify":
+            info["verificou"] = True
     if info["stop_blocks"] and info["trigger"] == "desconhecido":
-        info["trigger"] = "Stop hook (fallback)"
+        info["trigger"] = "Stop hook"
 except FileNotFoundError:
     pass
 json.dump(info, open(os.path.join(out, "trigger.json"), "w"), indent=1)
-print(f"  trigger: {info['trigger']}, stop_blocks={info['stop_blocks']}")
+print("  trigger: {trigger} | stop_blocks: {stop_blocks} | verificou: {verificou}".format(**info))
 PY
 
 echo "[$ARM-$REP] exit=$STATUS em $((END-START))s" >&2

@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// Adapter Claude Code — hook de Stop.
+// Adapter Claude Code — hook de Stop, versão LEGADA (arquitetura antiga).
+//
+// Preservado só para o braço d2 do experimento D: é o Stop que bloqueia com a
+// instrução COMPLETA do review, que era o gatilho principal antes do roteiro
+// pós-ABC. Não é o hook do produto — esse virou fallback.
+//
+// Imports ajustados para a profundidade daqui (research/exp-d/hooks).
 //
 // FAIL-OPEN é a regra número um: este processo roda dentro da sessão de
 // alguém. Chave ausente, git lento, config quebrada, bug nosso — todo caminho
@@ -11,12 +17,12 @@
 //   roda os passes em SUBAGENTE → apresenta → para de novo → guard silencia.
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, findRepoRoot } from "../../src/config.mjs";
-import { gitRoot } from "../../src/gate.mjs";
-import { prepare } from "../../src/prepare.mjs";
-import { claimRun, markReviewed } from "../../src/session.mjs";
-import { record } from "../../src/log.mjs";
-import { trace } from "../../src/trace.mjs";
+import { loadConfig, findRepoRoot } from "../../../src/config.mjs";
+import { gitRoot } from "../../../src/gate.mjs";
+import { prepare } from "../../../src/prepare.mjs";
+import { claimRun, markReviewed } from "../../../src/session.mjs";
+import { record } from "../../../src/log.mjs";
+import { trace } from "../../../src/trace.mjs";
 
 const BUDGET_MS = 60_000; // teto do hook inteiro
 const watchdog = setTimeout(() => process.exit(0), BUDGET_MS);

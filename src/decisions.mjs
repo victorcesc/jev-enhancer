@@ -422,6 +422,158 @@ const gerRegras = (root, arquivos) => {
   );
 };
 
+
+/**
+ * Caso de tabela que omite um campo que os irmãos preenchem.
+ *
+ * É a forma mais comum de teste que parece cobrir e não cobre: a asserção do
+ * corpo roda dentro de `if tc.wantCode != ""`, e o caso novo não declara
+ * wantCode. Passa verde sem verificar nada além do status.
+ */
+const gerCasoOmiteCampo = (arquivos) => {
+  const out = [];
+  for (const a of arquivos.filter((x) => /_test\.\w+$/.test(x.file))) {
+    const texto = a.add.map((l) => l.text).join("\n");
+    // entradas de tabela: blocos { ... } com campos `nome:`
+    const entradas = [...texto.matchAll(/\{([^{}]*?:[^{}]*?)\}/gs)]
+      .map((m) => ({ corpo: m[1], campos: new Set([...m[1].matchAll(/(\w+)\s*:/g)].map((x) => x[1])) }))
+      .filter((e) => e.campos.size >= 2);
+    if (entradas.length < 3) continue;
+    const freq = {};
+    for (const e of entradas) for (const c of e.campos) freq[c] = (freq[c] ?? 0) + 1;
+    for (const e of entradas) {
+      const faltando = Object.entries(freq)
+        .filter(([c, n]) => n >= entradas.length * 0.6 && !e.campos.has(c))
+        .map(([c]) => c);
+      if (!faltando.length) continue;
+      const nome = /name\s*:\s*"([^"]+)"/.exec(e.corpo)?.[1] ?? e.corpo.trim().slice(0, 40);
+      out.push(
+        cand("tests", nome,
+          `Este caso de teste omite ${faltando.join(", ")}, que a maioria dos casos irmãos declara. A asserção correspondente é pulada?`,
+          [`${a.file}`, `caso: ${nome}`, `campos ausentes: ${faltando.join(", ")}`,
+           `presentes: ${[...e.campos].join(", ")}`],
+          a.file, 0),
+      );
+    }
+  }
+  return out;
+};
+
+/** Assere tamanho N e inspeciona só o primeiro elemento. */
+const gerSoPrimeiroElemento = (arquivos) => {
+  const out = [];
+  for (const a of arquivos.filter((x) => /_test\.\w+$/.test(x.file))) {
+    const texto = a.add.map((l) => l.text).join("\n");
+    for (const m of texto.matchAll(/len\(([\w.]+)\)\s*!=\s*(\d+)/g)) {
+      const [, alvo, n] = m;
+      if (Number(n) < 2) continue;
+      const base = alvo.split(".").pop();
+      const indices = new Set([...texto.matchAll(new RegExp(`${base.replace(/[.*+?^\${}()|[\]\\]/g, "\\$&")}\\[(\\d+)\\]`, "g"))].map((x) => x[1]));
+      if (indices.size >= Number(n)) continue;
+      out.push(
+        cand("tests", alvo,
+          `O teste assere ${n} elementos em ${alvo} mas só inspeciona índice ${[...indices].join(", ") || "nenhum"}. Os demais são comparados?`,
+          [`${a.file}`, `len(${alvo}) != ${n}`, `índices inspecionados: ${[...indices].join(", ") || "nenhum"}`],
+          a.file, 0),
+      );
+    }
+  }
+  return out;
+};
+
+/** Valor semeado/declarado no teste e nunca lido depois. */
+const gerSeedMorto = (arquivos) => {
+  const out = [];
+  for (const a of arquivos.filter((x) => /_test\.\w+$/.test(x.file))) {
+    const texto = a.add.map((l) => l.text).join("\n");
+    for (const l of a.add) {
+      const m = /^\s*var\s+(\w{4,})\s+\w/.exec(l.text);
+      if (!m) continue;
+      const nome = m[1];
+      const usos = (texto.match(new RegExp(`\\b${nome}\\b`, "g")) ?? []).length;
+      if (usos > 2) continue; // declaração + uma escrita já é suspeito
+      out.push(
+        cand("tests", nome,
+          `${nome} é declarado e aparece ${usos}x no teste — provavelmente semeado e nunca lido. O setup é morto?`,
+          [`${a.file}:${l.n}`, l.text.trim().slice(0, 90), `ocorrências: ${usos}`],
+          a.file, l.n),
+      );
+    }
+  }
+  return out;
+};
+
+/** Constante de limite existe; o teste exercita só um lado dela. */
+const gerBordaNaoExercitada = (arquivos, repo) => {
+  const out = [];
+  const consts = new Set();
+  for (const r of repo) {
+    for (const m of r.texto.matchAll(/\b(?:const|var)\s+(Max\w+|Min\w+|Default\w+)\b/g)) consts.add(m[1]);
+  }
+  for (const a of arquivos.filter((x) => /_test\.\w+$/.test(x.file))) {
+    const texto = a.add.map((l) => l.text).join("\n");
+    for (const c of consts) {
+      const citada = texto.includes(c);
+      const relacionada = [...consts].filter((o) => o !== c && texto.includes(o));
+      if (citada || !relacionada.length) continue;
+      out.push(
+        cand("tests", c,
+          `O teste exercita ${relacionada.join(", ")} mas nunca ${c}. A borda aceita de ${c} está coberta?`,
+          [`${a.file}`, `constantes citadas: ${relacionada.join(", ")}`, `ausente: ${c}`],
+          a.file, 0),
+      );
+    }
+  }
+  return out;
+};
+
+/** Resultado de query trazido e descartado pelo chamador. */
+const gerResultadoDescartado = (arquivos, repo) => {
+  const out = [];
+  for (const a of arquivos.filter((x) => !/_test\.\w+$/.test(x.file))) {
+    for (const l of a.add) {
+      const m = /_\s*,\s*err\s*:?=\s*[\w.]*?\.?(\w+)\(/.exec(l.text);
+      if (!m) continue;
+      const fn = m[1];
+      const sql = repo.find((r) => r.file.endsWith(".sql") && new RegExp(`--\\s*name:\\s*${fn}\\b`).test(r.texto));
+      const colunas = sql
+        ? (sql.texto.split(new RegExp(`--\\s*name:\\s*${fn}\\b`))[1] ?? "").split(/FROM/i)[0].split(",").length
+        : 0;
+      out.push(
+        cand("db", fn,
+          `O resultado de ${fn} é descartado com \`_\`; só o erro é usado. A query precisa trazer tudo o que traz?`,
+          [`${a.file}:${l.n}`, l.text.trim().slice(0, 100),
+           colunas ? `a query declara ~${colunas} coluna(s)` : null],
+          a.file, l.n),
+      );
+    }
+  }
+  return out;
+};
+
+/** Comentário promete cobertura que o teste não exerce. */
+const gerPromessaDeTeste = (arquivos) => {
+  const out = [];
+  for (const a of arquivos.filter((x) => /_test\.\w+$/.test(x.file))) {
+    const texto = a.add.map((l) => l.text).join("\n");
+    for (const l of a.add) {
+      if (!/^\s*(\/\/|#|--)/.test(l.text)) continue;
+      if (!/\b(must not|should not|never|nao deve|não deve|isolat|only|apenas|garante)\b/i.test(l.text)) continue;
+      // identificadores citados perto do comentário
+      const proximos = a.add.filter((x) => Math.abs(x.n - l.n) <= 6).map((x) => x.text).join(" ");
+      const ids = [...new Set([...proximos.matchAll(/\b([a-z]\w*[A-Z]\w{3,})\b/g)].map((x) => x[1]))];
+      out.push(
+        cand("tests", l.text.trim().slice(0, 40),
+          `Este comentário promete um comportamento. O teste realmente o exercita, ou só declara os dados?`,
+          [`${a.file}:${l.n}`, l.text.trim().slice(0, 130),
+           ids.length ? `identificadores ao redor: ${ids.slice(0, 5).join(", ")}` : null],
+          a.file, l.n),
+      );
+    }
+  }
+  return out;
+};
+
 /* ------------------------------------------------------------- público --- */
 
 /**
@@ -448,6 +600,12 @@ export const gerarDecisoes = (root, diff) => {
     ...gerSemTransacao(arquivos),
     ...gerParidade(arquivos, repo),
     ...gerRegras(root, arquivos),
+    ...gerCasoOmiteCampo(arquivos),
+    ...gerSoPrimeiroElemento(arquivos),
+    ...gerSeedMorto(arquivos),
+    ...gerBordaNaoExercitada(arquivos, repo),
+    ...gerResultadoDescartado(arquivos, repo),
+    ...gerPromessaDeTeste(arquivos),
   ];
   // dedupe por (kind, subject, file, line)
   const vistos = new Set();

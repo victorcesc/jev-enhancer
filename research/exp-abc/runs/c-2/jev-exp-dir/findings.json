@@ -1,0 +1,74 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "sqlc nao foi regenerado apos criar query/fiado.sql: db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams/Row e db.SummarizePendingFiadoSalesByCustomerParams/Row nao existem em internal/db (so ha auth/session/sync/user .sql.go). `go build ./...` falha com 8 erros 'undefined: db.*'. O modulo inteiro nao compila; falta rodar `make -C packages/api-go sqlc` e commitar internal/db/fiado.sql.go + querier.go."
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 107,
+      "symbol": "TestPendingFiadoQueries",
+      "severity": "high",
+      "issue": "Mesma causa: `queries.GetCustomerByUserIDAndID undefined (type *db.Queries has no field or method ...)`. O pacote db_test nao compila, entao `make -C packages/api-go test` falha para todo o modulo, nao apenas para os testes de integracao (que seriam skipados sem TEST_DATABASE_URL)."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "O LEFT JOIN usa uma subquery agregada sem nenhum filtro: `SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id`. O predicado do join (p.sale_id = s.id) nao pode ser empurrado para dentro de uma subquery com GROUP BY, entao o Postgres agrega a tabela payments inteira (todos os tenants) a cada requisicao. Isso ocorre duas vezes por chamada do endpoint (linhas 29 e 48, list + summarize), em uma rota paginada. Uma subquery correlacionada/LATERAL ou um join restrito as vendas do cliente evitaria a varredura completa."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending",
+      "severity": "med",
+      "issue": "Os tres erros do store sao descartados e substituidos por internalError() (linhas 42, 50, 73): nao ha %w nem log, e o handler (writeFiadoFailure) tambem nao loga. Um 500 desse endpoint nao deixa nenhum rastro da falha real do banco. AGENTS.md exige 'Wrap inspectable errors with %w' e 'log at process or handler boundaries'."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "Erro de conversao do pgtype.Numeric e engolido retornando 0. Um NUMERIC invalido/NULL em total, total_paid, balance ou total_devido faz a API responder 200 com saldo R$ 0,00 devido em vez de sinalizar erro — o pior default possivel para um endpoint de cobranca de fiado."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "`saleDate, _ := timestamptzTime(row.SaleDate)` ignora o bool de validade que a funcao retorna de proposito. Se sale_date vier NULL, o JSON traz \"data\":\"0001-01-01T00:00:00Z\" silenciosamente. Hoje sale_date e NOT NULL no schema, entao e latente, mas o valor de retorno nao serve para nada como esta."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 16,
+      "symbol": "PendingResponse",
+      "severity": "low",
+      "issue": "As chaves JSON sao snake_case (customer_id, total_devido, valor_original, sale_id), enquanto todo o contrato existente da API usa camelCase (internal/sync/types.go: unitPrice, paymentMethod). O comentario de fiado_router_test.go:105 afirma que sao 'as chaves que o cliente desktop le', mas nao existe nenhum consumidor desses nomes no repositorio (grep por total_devido so encontra os proprios arquivos novos), entao a inconsistencia nao esta justificada por nenhum cliente."
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "severity": "low",
+      "issue": "O mesmo endpoint devolve dois envelopes de erro diferentes: o middleware Bearer responde 401 via apperror com {\"error\":...,\"code\":...}, e o handler responde 400/404/500 com {\"success\":false,\"message\":...,\"code\":...}. Um cliente precisa tratar dois formatos para a mesma rota. (Segue o padrao ja existente de sync, mas e uma rota nova.)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 102,
+      "symbol": "timestamptzTime",
+      "severity": "low",
+      "issue": "numericFloat e timestamptzTime sao copias literais de internal/sync/pgconv.go. Tres helpers de conversao pgtype duplicados entre pacotes; deveriam ficar em um helper compartilhado."
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "TestPendingFiadoQueries",
+      "severity": "low",
+      "issue": "productID e semeado (INSERT em products + Scan) e nunca usado depois — nenhuma das queries de fiado toca products nem sale_items. Seed morto no teste."
+    }
+  ]
+}

@@ -14,6 +14,8 @@
 #   +1 — a-2: colunas de customers buscadas e descartadas
 #   +2 — b-2: caminhos de erro de auth sem cobertura na rota, e casos de
 #        borda (pagamento em excesso, customer_id nulo) nunca exercitados
+#   +2 — c-2: helpers pgtype duplicados de internal/sync/pgconv.go, e
+#        productID semeado no teste e nunca usado
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -24,7 +26,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 20
+known_total: 22
 
 defects:
   - id: sqlc-not-generated
@@ -219,10 +221,31 @@ defects:
     detail: >
       Sem caso de SUM(amount) > total nem de venda com customer_id NULL, o
       filtro COALESCE(p.total_paid,0) < s.total e o cast
-      sqlc.arg(customer_id)::INT nunca são testados nos limites. O teste
-      também semeia um produto que nenhuma asserção usa.
+      sqlc.arg(customer_id)::INT nunca são testados nos limites.
     match_any: ["pagamento em excesso", "sum(amount) > total", "customer_id null",
                 "nos limites", "nesses limites", "nenhuma assercao usa", "nenhuma asserção usa"]
+
+  - id: pgconv-helpers-duplicated
+    severity: low
+    file: packages/api-go/internal/fiado/pending.go
+    title: "numericFloat e timestamptzTime são cópias literais de internal/sync/pgconv.go"
+    detail: >
+      Verificado: pgconv.go:11 tem numericFloat e pgconv.go:35 tem
+      timestamptzTime, idênticos aos de fiado/pending.go. Helpers de conversão
+      pgtype duplicados entre pacotes em vez de um helper compartilhado.
+    match_any: ["pgconv", "helper compartilhado", "helpers de conversao",
+                "helpers de conversão", "copias literais de internal/sync",
+                "cópias literais de internal/sync"]
+
+  - id: dead-seed-product-in-test
+    severity: low
+    file: packages/api-go/internal/db/fiado_integration_test.go
+    title: "productID é semeado no teste e nunca usado"
+    detail: >
+      INSERT em products + Scan para productID, que aparece 2 vezes no arquivo
+      (declaração e Scan) e nunca numa asserção. Nenhuma query de fiado toca
+      products ou sale_items. Seed morto.
+    match_any: ["productid", "seed morto", "produto que nenhuma", "nunca usado depois"]
 
   - id: single-letter-params
     severity: low

@@ -1,0 +1,188 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 12
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 17,
+      "symbol": "PendingStore",
+      "issue": "sqlc code was never regenerated for query/fiado.sql: internal/db/fiado.sql.go does not exist, so db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams/Row and db.SummarizePendingFiadoSalesByCustomerParams/Row are undefined. 'go build ./...' in packages/api-go fails with 8 undefined errors and 'make test' cannot compile. AGENTS.md requires running 'make -C packages/api-go sqlc' after touching query/ or db/schema.sql.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.43
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "Adding the broad prefix '/api/v1/customers/' to bearerRoutePrefixes exempts every current and future route under that prefix from the X-API-Key check whenever any Authorization: Bearer header is present (the API-key middleware only checks the prefix string, not token validity). Future non-bearer routes mounted under /api/v1/customers/ silently lose API-key enforcement.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.81,
+        "severity_score": 2.75,
+        "evidence_sufficient": 0.52
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.81)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 31,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "Both queries LEFT JOIN an unfiltered grouped subquery 'SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id'. Postgres cannot push the s.user_id/s.customer_id quals into a non-LATERAL grouped subquery, so every request aggregates the entire payments table (all tenants) twice - once for the list, once for the summary - despite payments_sale_id_idx existing. Rewrite as a correlated/LATERAL subquery or join payments directly and GROUP BY s.id.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.33,
+        "evidence_sufficient": 0.6
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "numericFloat swallows Float64Value errors and NULL and returns 0. A numeric that fails conversion turns a real outstanding balance into saldo/total_devido of 0.00 in the JSON response - a silently wrong debt shown to the operator instead of an error. No test covers the error branch.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.9,
+        "severity_score": 2.32,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.90)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "ListPending",
+      "issue": "The summary (COUNT/SUM) and the page rows are read in two separate queries outside any transaction or repeatable-read snapshot. A payment settling a sale between the two reads makes pagination.total/total_pages and total_devido disagree with the returned data, and OFFSET-based paging can skip or duplicate sales for a client walking pages while payments are recorded.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 2.25,
+        "evidence_sufficient": 0.58
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "issue": "internalError() builds a brand-new AppError and discards the underlying store error: it is never wrapped with %w and never logged, and handler.writeFiadoFailure does not log either. A Postgres outage or malformed query on GET /api/v1/customers/{id}/fiado returns 500 with zero trace anywhere in the logs. AGENTS.md: return errors from lower layers, log at handler boundaries, wrap inspectable errors with %w.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.91,
+        "severity_score": 1.88,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.91)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 99,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "The comment 'Same customer id must not match another users sales' promises tenant isolation coverage, but seedSale always inserts with userID/customerID and no sale is ever created for otherUserID/otherCustomerID. The 's.user_id = $1' filter in ListPendingFiadoSalesByCustomer and SummarizePendingFiadoSalesByCustomer is therefore never exercised; the 'no open sales' subtest passes trivially because that user has no rows at all. Dropping the user_id predicate would keep every assertion green.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.78,
+        "severity_score": 1.59,
+        "evidence_sufficient": 0.7
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.78)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "'saleDate, _ := timestamptzTime(row.SaleDate)' discards the validity flag, so an invalid/NULL sale_date is serialized as 0001-01-01T00:00:00Z in the 'data' field instead of being reported or omitted. The bool return of timestamptzTime is dead at its only call site.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.93,
+        "severity_score": 1.54,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.93)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 49,
+      "symbol": "Page",
+      "issue": "Page exports Number and Limit, so callers can build one without NewPage (the tests already do: fiado.Page{Number: 3, Limit: 20}). Offset() then computes int32((Number-1)*Limit) with no bound check, silently wrapping to a negative OFFSET for large literals, which Postgres rejects at runtime. The MaxPage invariant is only enforced on the NewPage path.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.67,
+        "severity_score": 1.49,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.67)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 64,
+      "symbol": "writeFiadoFailure",
+      "issue": "The non-AppError fallback branch (generic error -> 500 with message 'Erro ao buscar fiado do cliente') is never exercised: TestCustomerFiado_serviceFailureIs500 injects an apperror.AppError, which takes the errors.As path. A plain error returned by a future lister implementation would hit untested code.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.57,
+        "severity_score": 0.99,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.57)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 202,
+      "symbol": "TestCustomerFiado_requiresBearerToken",
+      "issue": "Only the 401 status is asserted; the test does not check that the stub lister was never invoked, nor the error body/code. It would still pass if the handler ran the query before the bearer middleware rejected the request.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.63,
+        "severity_score": 0.93,
+        "evidence_sufficient": 0.67
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.63)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/apikey_test.go",
+      "line": 98,
+      "symbol": "TestAPIKey",
+      "issue": "The new 'fiado without bearer requires API key' case sets only wantStatus and omits wantCode, so assertJSONError is skipped and the UNAUTHORIZED error code/body is never asserted - unlike the sibling 'missing header'/'invalid header' cases which do assert it.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.74,
+        "severity_score": 0.87,
+        "evidence_sufficient": 0.46
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.74)"
+    }
+  ]
+}

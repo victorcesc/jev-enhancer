@@ -20,6 +20,8 @@
 #   +2 — experimento D: FailureResponse/writeFiadoFailure duplicando os
 #        equivalentes de sync, e segunda linha do stub nunca comparada
 #   +1 — d3-1: borda aceita de MaxPage nunca exercitada
+#   +1 — d3-2: novo caso de apikey_test omite wantCode, pulando a asserção
+#        do corpo do erro
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -30,7 +32,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 26
+known_total: 27
 
 defects:
   - id: sqlc-not-generated
@@ -300,6 +302,18 @@ defects:
       garante que (page-1)*limit cabe em int32. Verificado.
     match_any: ["bordas aceitas", "borda aceita", "1000000", "page == maxpage",
                 "combinacao maxpage", "combinação maxpage"]
+
+  - id: apikey-case-omits-wantcode
+    severity: low
+    file: packages/api-go/internal/middleware/apikey_test.go
+    title: "novo caso de teste omite wantCode e pula a asserção do corpo"
+    detail: >
+      O caso "fiado without bearer requires API key" (linha 98) declara só
+      wantStatus. Como assertJSONError é chamado dentro de
+      `if tc.wantCode != ""` (linha 121), o corpo do erro nunca é verificado —
+      enquanto os casos irmãos (linhas 51 e 60) declaram wantCode. Só o código
+      HTTP é testado. Verificado.
+    match_any: ["wantcode", "assertjsonerror", "fiado without bearer"]
 
   - id: single-letter-params
     severity: low

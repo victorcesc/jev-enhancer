@@ -18,10 +18,28 @@ import { record } from "./log.mjs";
 
 const arquivo = (root, nome) => path.join(root, ".jev", nome);
 
+/**
+ * Onde os achados podem ter sido gravados.
+ *
+ * O caminho pedido é `.jev/findings.json`, mas um worker gravou em
+ * `.findings.json` na raiz. Depender do modelo acertar o caminho é a mesma
+ * fragilidade que já custou 15 turnos de análise quando ele não chamava o
+ * verify — então aceitamos os vizinhos óbvios em vez de perder o trabalho.
+ */
+const CANDIDATOS = ["findings.json", "../.findings.json", "../findings.json"];
+
+const acharBrutos = (root) => {
+  for (const nome of CANDIDATOS) {
+    const p = arquivo(root, nome);
+    if (existsSync(p)) return p;
+  }
+  return null;
+};
+
 /** Há achados gravados que ainda não passaram pela triagem? */
 export const precisaTriagem = (root) => {
-  const brutos = arquivo(root, "findings.json");
-  if (!existsSync(brutos)) return false;
+  const brutos = acharBrutos(root);
+  if (!brutos) return false;
   const triados = arquivo(root, "findings-verified.json");
   if (!existsSync(triados)) return true;
   try {
@@ -38,9 +56,11 @@ export const precisaTriagem = (root) => {
  * Toda falha é engolida: triagem é melhoria, não pode travar a sessão.
  */
 export const triar = async (root) => {
+  const origem = acharBrutos(root);
+  if (!origem) return null;
   let findings;
   try {
-    const bruto = JSON.parse(readFileSync(arquivo(root, "findings.json"), "utf8"));
+    const bruto = JSON.parse(readFileSync(origem, "utf8"));
     findings = Array.isArray(bruto) ? bruto : (bruto.findings ?? []);
   } catch {
     return null;

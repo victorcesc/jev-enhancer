@@ -84,9 +84,9 @@ Mas encontraram coisas **diferentes**:
 > numeradores, então qualquer um dos dois dava ~71% por construção.
 >
 > Com teto de achados folgado (20 em vez de 10), execuções posteriores acharam
-> **9 defeitos reais a mais**, todos verificados no código. Contra o conjunto
-> atual de 23, cada um destes reviews fez **10/23 = 43%**, e a união dos dois,
-> **14/23 = 61%**.
+> **12 defeitos reais a mais**, todos verificados no código. Contra o conjunto
+> atual de 26, cada um destes reviews fez **10/26 = 38%**, e a união dos dois,
+> **14/26 = 54%**.
 >
 > A conclusão qualitativa — os dois empatam e acham coisas diferentes —
 > **continua válida**. Os percentuais, não.
@@ -158,16 +158,16 @@ contexto preparado, sem protocolo, sem verificação, acharia os mesmos defeitos
 Se sim, a máquina toda não estaria pagando por si.
 
 **Resposta: não acharia.** Esse braço foi construído e rodado 3 vezes em
-`EXPERIMENTO-ABC.md`. Ele fica em 32% de recall contra 52% do pipeline
+`EXPERIMENTO-ABC.md`. Ele fica em 28% de recall contra 46% do pipeline
 completo, e as faixas nem se tocam. Mais decisivo ainda: **1× pipeline
-completo domina 2× gatilho mínimo** — mais recall (52% vs 46%) com menos
+completo domina 2× gatilho mínimo** — mais recall (46% vs 41%) com menos
 tokens (1,91M vs 2,65M).
 
 A hipótese que eu registrei aqui — "o contexto preparado não reduziu a
 investigação do subagente, então não está pagando" — estava errada. Ele não
 paga por *encurtar* a investigação; paga por *enquadrar a tarefa*. O mesmo
-texto de instrução entregue como prompt do usuário rende 41%, e entregue como
-bloqueio de hook rende 32%.
+texto de instrução entregue como prompt do usuário rende 36%, e entregue como
+bloqueio de hook rende 28%.
 
 ## Ressalvas
 
@@ -176,7 +176,7 @@ bloqueio de hook rende 32%.
 - A união de 14 defeitos **não é ground truth**: é a união do que dois reviews
   acharam. O denominador real é desconhecido — e de fato subiu para 23 quando
   mais execuções rodaram (ver `EXPERIMENTO-ABC.md`), então o recall citado era
-  um limite superior bem otimista dos dois lados.
+  um limite superior bem otimista dos dois lados: o denominador quase dobrou.
 - O braço sem jev rodou em **contexto limpo**; o com jev rodou dentro de uma
   sessão com a implementação acumulada. Isso favorece o braço sem jev na conta
   de tokens (é a origem dos 325k de orquestração) e é, ao mesmo tempo, a

@@ -1,0 +1,46 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "query/fiado.sql foi adicionado mas o sqlc nunca foi regerado: nao existe internal/db/fiado.sql.go e querier.go nao foi atualizado. Todo o modulo nao compila. `go build ./...` falha com 8 erros: undefined db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams, db.ListPendingFiadoSalesByCustomerRow, db.SummarizePendingFiadoSalesByCustomerParams, db.SummarizePendingFiadoSalesByCustomerRow (pending.go:18-20,35,45,66), e `go vet` tambem quebra em internal/db/fiado_integration_test.go:107 (queries.GetCustomerByUserIDAndID undefined). Falta rodar `make -C packages/api-go sqlc` e commitar internal/db/fiado.sql.go + querier.go."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "Ambas as queries usam um subselect agregado nao-correlacionado `(SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id)` num LEFT JOIN. O Postgres nao consegue empurrar os filtros de s.user_id/s.customer_id para dentro do GROUP BY, entao agrega a tabela payments INTEIRA (de todos os tenants) antes do join, duas vezes por request, mesmo para um cliente com poucas vendas. Em base multi-tenant isso degrada linearmente com o volume global de pagamentos. Um LATERAL ou subquery correlacionada `(SELECT COALESCE(SUM(amount),0) FROM payments WHERE sale_id = s.id)` restringe o trabalho as linhas do cliente. Nota: os indices existentes (sales_user_id_is_credit_idx, sales_customer_id_idx) nao cobrem o filtro composto (user_id, customer_id, is_credit, status)."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending",
+      "severity": "med",
+      "issue": "Os erros do store sao descartados: as tres chamadas (linhas 42, 50, 73) retornam internalError() sem envolver o erro original com %w nem logar. Como writeFiadoFailure (handler/fiado.go:62) tambem nao loga e o RequestLogger so registra o status, a causa raiz de qualquer 500 desaparece por completo — um timeout de pool, um erro de sintaxe SQL e um deadlock ficam indistinguiveis em producao. O middleware ja expoe middleware.LoggerFromContext(ctx) e o AGENTS.md pede explicitamente 'wrap inspectable errors with %w' e logar na fronteira."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "O sumario (SummarizePendingFiadoSalesByCustomer, linha 45) e a pagina (ListPendingFiadoSalesByCustomer, linha 66) sao duas queries independentes, sem transacao/snapshot comum. Um INSERT em payments que quita uma venda entre as duas chamadas produz uma resposta incoerente: pagination.total/total_pages e total_devido contam a venda, mas data nao a traz (ou vice-versa), e o cliente pode ver total_pages=2 com a pagina 2 vazia. Envolver ambas numa transacao REPEATABLE READ (ou derivar o total da mesma query) elimina a janela."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat / timestamptzTime",
+      "severity": "low",
+      "issue": "numericFloat (linha 94) e timestamptzTime (linha 102) sao copias literais das mesmas funcoes ja existentes em internal/sync/pgconv.go:11. Alem da duplicacao, o segundo valor de retorno de timestamptzTime nunca e usado (pending.go:77 descarta com `_`), entao a assinatura (time.Time, bool) e codigo morto. Extrair os helpers para um pacote compartilhado (ou reusar sync/pgconv) evita que as duas copias divirjam no tratamento de NULL/overflow."
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "severity": "low",
+      "issue": "O comentario 'Same customer id must not match another user's sales' promete cobrir o isolamento por user_id nas queries de listagem/sumario, mas o teste semeia otherCustomerID como um cliente NOVO (id diferente de customerID) e so o usa em 'SummarizePendingFiadoSalesByCustomer with no open sales' (linha 201). Como os ids diferem, o resultado zero seria o mesmo se o filtro `s.user_id = $1` fosse removido das duas queries — o teste passa com a query vulnerável. Para cobrir de fato, seria preciso consultar ListPendingFiadoSalesByCustomer/Summarize com UserID=otherUserID e CustomerID=customerID (o cliente do primeiro usuario) e exigir zero linhas."
+    }
+  ]
+}

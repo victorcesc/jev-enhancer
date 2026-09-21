@@ -1,8 +1,13 @@
 # Experimento A/B/C — o pipeline paga por si?
 
 9 execuções (3 por braço) sobre o mesmo snapshot congelado, mesmo modelo
-(`claude-opus-5`), pontuadas contra um known defect set de 23 defeitos que eu
-verifiquei um a um no código.
+(`claude-opus-5`), pontuadas contra um known defect set que eu verifiquei um a
+um no código.
+
+> **Números recalculados contra 26 defeitos** (era 23 quando escrevi isto).
+> O experimento D continuou achando defeitos reais no mesmo snapshot, e o
+> denominador é compartilhado. Os percentuais caíram para todo mundo; as
+> conclusões e a ordem entre braços não mudaram.
 
 | braço | o que é |
 | --- | --- |
@@ -17,16 +22,16 @@ demonstrado saem.*
 
 | braço | achados | recall | tokens | tempo |
 | --- | --- | --- | --- | --- |
-| A | 10,0 (9–11) | 41% (35–43%) | 1.805.478 | 293s |
-| **B** | **12,0 (10–14)** | **52% (43–61%)** | 1.906.151 | 311s |
-| C | 8,3 (6–10) | 32% (22–39%) | 1.326.599 | 185s |
+| A | 10,0 (9–11) | 36% (31–38%) | 1.805.478 | 293s |
+| **B** | **12,0 (10–14)** | **46% (38–54%)** | 1.906.151 | 311s |
+| C | 8,3 (6–10) | 28% (19–35%) | 1.326.599 | 185s |
 
 Par a par, contando separação só quando as faixas não se tocam:
 
 ```
-A ~ B   empate — 35%–43% vs 43%–61%
-A ~ C   empate — 35%–43% vs 22%–39%
-B > C   SEPARADO — pior caso de B (43%) supera o melhor de C (39%)
+A ~ B   empate — 31%–38% vs 38%–54%
+A ~ C   empate — 31%–38% vs 19%–35%
+B > C   SEPARADO — pior caso de B (38%) supera o melhor de C (35%)
 ```
 
 **O critério não se aplica: `C` não empata com `B`.** O pipeline compra recall.
@@ -37,17 +42,17 @@ Comparar 1 execução de B com 1 de C é injusto — B custa mais. Pareando cust
 
 | configuração | recall | tokens | defeitos por milhão de tokens |
 | --- | --- | --- | --- |
-| 1× C | 32% | 1.326.599 | 5,5 |
-| 1× A | 41% | 1.805.478 | 5,2 |
-| **1× B** | **52%** | **1.906.151** | **6,3** |
-| 2× C | 46% | 2.653.197 | 4,0 |
-| 2× A | 58% | 3.610.955 | 3,7 |
-| 2× B | 68% | 3.812.302 | 4,1 |
-| 3× C | 57% | 3.979.796 | 3,3 |
-| 3× A | 70% | 5.416.433 | 3,0 |
-| 3× B | 78% | 5.718.453 | 3,1 |
+| 1× C | 28% | 1.326.599 | 5,5 |
+| 1× A | 36% | 1.805.478 | 5,2 |
+| **1× B** | **46%** | **1.906.151** | **6,3** |
+| 2× C | 41% | 2.653.197 | 4,0 |
+| 2× A | 51% | 3.610.955 | 3,7 |
+| 2× B | 60% | 3.812.302 | 4,1 |
+| 3× C | 50% | 3.979.796 | 3,3 |
+| 3× A | 62% | 5.416.433 | 3,0 |
+| 3× B | 69% | 5.718.453 | 3,1 |
 
-**1× B domina 2× C**: mais recall (52% vs 46%) com menos tokens (1,91M vs
+**1× B domina 2× C**: mais recall (46% vs 41%) com menos tokens (1,91M vs
 2,65M). Gastar o orçamento no pipeline rende mais do que gastar em rodar o
 review simples duas vezes.
 
@@ -61,7 +66,7 @@ retorno decrescente claro.
 diferença é como ela chega: em `A` é o prompt do usuário; em `C` é o `reason`
 de um Stop hook, depois de uma tarefa trivial.
 
-`A` fica em 41% e `C` em 32%.
+`A` fica em 36% e `C` em 28%.
 
 A conclusão prática é que **o minimal trigger não é equivalente a pedir**. O
 agente trata o bloqueio injetado como interrupção a ser resolvida rápido, não
@@ -101,7 +106,7 @@ de campo.
 
 ## O known defect set cresceu 64% durante a medição
 
-14 → 17 → 18 → 20 → 22 → 23. Nove execuções, e defeitos inéditos ainda
+14 → 17 → 18 → 20 → 22 → 23 → 26 (o experimento D somou mais 3). Nove execuções, e defeitos inéditos ainda
 entraram na última.
 
 | execução | achou | inéditos |

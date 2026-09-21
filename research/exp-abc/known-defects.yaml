@@ -11,6 +11,7 @@
 #   +3 — b-1, a primeira execução com teto de 20: isenção de X-API-Key num
 #        namespace inteiro, regras de SQL só cobertas por teste que pula sem
 #        Postgres, e ramo 401 inalcançável
+#   +1 — a-2: colunas de customers buscadas e descartadas
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -21,10 +22,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-# 14 originais (união dos dois reviews-piloto) + 2 descobertos em b-1 e
-# verificados por mim no código. O conjunto cresce quando um review acha algo
-# real que ninguém tinha achado — por isso `known_total` é versionado aqui.
-known_total: 17
+known_total: 18
 
 defects:
   - id: sqlc-not-generated
@@ -184,6 +182,17 @@ defects:
       que aborta antes ou injeta o userID. Nenhum teste monta o handler sem o
       middleware. Verificado no código.
     match_any: ["unauthenticated", "useridfromcontext", "inalcancavel", "inalcançável", "codigo morto", "código morto"]
+
+  - id: customer-columns-fetched-unused
+    severity: low
+    file: packages/api-go/query/fiado.sql
+    title: "GetCustomerByUserIDAndID traz todas as colunas e o chamador descarta"
+    detail: >
+      A query faz SELECT de 10 colunas de customers, mas ListPending usa
+      `if _, err := s.store.GetCustomerByUserIDAndID(...)` — só o erro
+      importa, para decidir o 404. Um SELECT 1 / EXISTS diria a intenção e
+      evitaria a transferência. Verificado em fiado.sql:5-11 e pending.go:35.
+    match_any: ["descarta o resultado", "select 1", "colunas de customers", "10 colunas", "so usa o erro", "só usa o erro"]
 
   - id: single-letter-params
     severity: low

@@ -1,0 +1,159 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 9,
+    "needs_context": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "issue": "O sqlc nunca foi regenerado para query/fiado.sql: internal/db nao tem fiado.sql.go. `go build ./...` falha com 'undefined: db.GetCustomerByUserIDAndIDParams / ListPendingFiadoSalesByCustomerParams / ListPendingFiadoSalesByCustomerRow / SummarizePendingFiadoSalesByCustomerParams / SummarizePendingFiadoSalesByCustomerRow'. Todo o modulo (server, testes unitarios e de integracao) nao compila.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.41
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "numericFloat engole o erro de Float64Value e retorna 0. Um NUMERIC nao convertivel (NaN, overflow) faz saldo/valor_pago/total_devido virarem 0.00 no JSON, ou seja, a divida do cliente aparece como quitada em vez de falhar visivelmente.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 2.61,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.86)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "O prefixo /api/v1/customers/ isenta de X-API-Key qualquer rota atual ou futura sob esse caminho sempre que houver header Authorization: Bearer, ampliando o bypass de API key alem do endpoint de fiado. Alem disso /api/v1/customers sem barra final nao e coberto.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.75,
+        "severity_score": 2.59,
+        "evidence_sufficient": 0.63
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.75)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending",
+      "issue": "Todos os erros do store sao descartados e substituidos por internalError(): sem %w e sem log em nenhuma camada (o handler writeFiadoFailure tambem nao loga). AGENTS.md exige envolver erros inspecionaveis com %w e logar na borda. Qualquer 500 em producao vira mensagem generica sem causa raiz.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 2.17,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "issue": "Summarize e List sao duas consultas independentes fora de transacao. Um pagamento concorrente entre elas faz pagination.total/total_pages/total_devido divergirem da pagina retornada (ex.: total=2 com 3 linhas, ou pagina vazia para page dentro de total_pages).",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 2.07,
+        "evidence_sufficient": 0.63
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "PendingService.ListPending",
+      "issue": "O booleano de validade de timestamptzTime e descartado (saleDate, _ :=). Um sale_date NULL/invalido vira time.Time zero e e serializado como 0001-01-01T00:00:00Z no campo data, em vez de erro ou omissao; o segundo retorno do helper e codigo morto.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.91,
+        "severity_score": 1.68,
+        "evidence_sufficient": 0.77
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.91)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O comentario declara que o mesmo customer id nao pode casar com vendas de outro usuario e semeia otherCustomerID, mas nenhuma assercao chama ListPendingFiadoSalesByCustomer/Summarize com UserID=otherUserID e CustomerID=customerID (o cliente do usuario A). O teste 'no open sales' usa otherCustomerID, que nao tem venda alguma, logo passaria mesmo se o filtro por user_id sumisse da query.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.68,
+        "severity_score": 1.43,
+        "evidence_sufficient": 0.71
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.68)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 135,
+      "symbol": "TestCustomerFiado_responseKeys",
+      "issue": "items[0] e indexado sem verificar len(items) > 0: se data vier vazio o teste entra em panic (index out of range) em vez de falhar com mensagem, mascarando a regressao real.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.75,
+        "severity_score": 1.18,
+        "evidence_sufficient": 0.76
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.75)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 211,
+      "symbol": "TestCustomerFiado_serviceFailureIs500",
+      "issue": "O caminho de 500 so e exercitado com um *apperror.AppError ja formatado. O ramo de fallback de writeFiadoFailure (handler/fiado.go:63-70), que trata erro nao-AppError vindo do service, nunca e coberto por teste: nada garante status 500 nem corpo com code INTERNAL_ERROR nesse caso.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.73,
+        "severity_score": 1.02,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.73)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/page_test.go",
+      "line": 508,
+      "symbol": "TestNewPage_invalid",
+      "issue": "As bordas aceitas nao sao testadas: page == MaxPage (1000000) e a combinacao MaxPage/MaxLimit em Page.Offset(), unico ponto que garante que (page-1)*limit cabe em int32. So o caso rejeitado (1000001) e exercitado.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.42,
+        "severity_score": 0.99,
+        "evidence_sufficient": 0.67
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.42) mas nada no código contradiz"
+    }
+  ]
+}

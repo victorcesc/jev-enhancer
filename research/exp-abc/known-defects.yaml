@@ -19,6 +19,7 @@
 #   +1 — a-1 (reexecução): rota versionada convivendo com rotas na raiz
 #   +2 — experimento D: FailureResponse/writeFiadoFailure duplicando os
 #        equivalentes de sync, e segunda linha do stub nunca comparada
+#   +1 — d3-1: borda aceita de MaxPage nunca exercitada
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -29,7 +30,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 25
+known_total: 26
 
 defects:
   - id: sqlc-not-generated
@@ -136,7 +137,9 @@ defects:
     detail: >
       int32((p.Number-1)*p.Limit) só é seguro pelo invariante de NewPage, mas
       Page tem campos exportados e é construído direto nos testes.
-    match_any: ["offset", "int32", "overflow", "maxpage", "newpage"]
+    # "maxpage" saiu: casava também com maxpage-boundary-untested, que é
+    # sobre cobertura de teste, não sobre o invariante ser burlável.
+    match_any: ["offset", "int32", "overflow", "campos exportados", "newpage"]
 
   - id: vacuous-assertion-invalidparams
     severity: low
@@ -285,6 +288,18 @@ defects:
       as seguintes passaria. Verificado.
     match_any: ["out.data[0]", "segunda linha", "so inspeciona", "só inspeciona",
                 "nunca comparada", "first := out.data"]
+
+  - id: maxpage-boundary-untested
+    severity: low
+    file: packages/api-go/internal/fiado/page_test.go
+    title: "borda ACEITA de MaxPage nunca é exercitada"
+    detail: >
+      page_test.go cobre limit == MaxLimit (aceito, linha 19) e page = 1000001
+      (rejeitado, linha 44), mas nunca page == MaxPage nem a combinação
+      MaxPage×MaxLimit em Page.Offset() — que é justamente o único ponto que
+      garante que (page-1)*limit cabe em int32. Verificado.
+    match_any: ["bordas aceitas", "borda aceita", "1000000", "page == maxpage",
+                "combinacao maxpage", "combinação maxpage"]
 
   - id: single-letter-params
     severity: low

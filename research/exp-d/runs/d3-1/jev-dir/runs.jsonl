@@ -1,0 +1,4 @@
+{"at":"2026-09-21T15:48:44.137Z","status":"completed","stage":"review","gate":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"trigger":"agent"}
+{"at":"2026-09-21T15:49:10.351Z","status":"completed","gate":"passed","reason":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"rules":["AGENTS.md"],"deterministic_findings":0,"passes":["correctness","tests"],"session":"probe-legacy"}
+{"at":"2026-09-21T15:51:58.255Z","status":"completed","stage":"verify","mode":"jev","findings":10,"verified":10,"verdicts":{"confirmed":9,"needs_context":1},"jev_tokens":20190,"ms":1252}
+{"at":"2026-09-21T15:52:29.103Z","status":"skipped","reason":"already_reviewed","session":"3ba2aad9-c94a-4630-a237-a2cee00ceefa","stage":"fallback"}

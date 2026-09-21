@@ -21,10 +21,9 @@ JEV=/Users/cesc/Projects/jev-enhancer
 OUT="$EXP/runs/$ARM-$REP"
 MODEL=claude-opus-5
 
-# mesma regra do run-all.sh: chave do ambiente ou do .env gitignorado
-if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$JEV/.env" ]; then
-  set -a; . "$JEV/.env"; set +a
-fi
+# credencial na variável certa + ambiente limpo da sessão pai
+# shellcheck disable=SC1091
+. "$EXP/env.sh"
 TRIVIAL='Responda em UMA linha, sem preambulo: quantos arquivos .go existem em packages/api-go/internal/fiado/?'
 
 mkdir -p "$OUT"
@@ -77,7 +76,7 @@ PY
 echo "[$ARM-$REP] iniciando..." >&2
 START=$(date +%s)
 set +e
-claude -p "$PROMPT" --model "$MODEL" --output-format json \
+claude -p "$PROMPT" --model "$MODEL" --output-format json < /dev/null \
   > "$OUT/result.json" 2> "$OUT/stderr.log"
 STATUS=$?
 set -e

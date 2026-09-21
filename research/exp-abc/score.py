@@ -203,12 +203,66 @@ def diversity():
             print(f"  {' + '.join(combo):<20}{u:>8.0%}{flag}")
 
 
+def verify_effect():
+    """O que o Jev Verify adiciona e o que ele custa (só braço B).
+
+    `findings.json` é o bruto que o subagente gerou; `findings-verified.json`
+    é o que sobrou depois da triagem. A diferença entre os dois, medida contra
+    o known defect set, separa as duas coisas que importam:
+
+      - falso positivo rejeitado  -> ganho de precisão
+      - defeito CONHECIDO rejeitado -> falsa rejeição, o dano que preocupa
+    """
+    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    rows = []
+    for run in runs:
+        vf = run / "jev-dir" / "findings-verified.json"
+        raw = run / "findings.json"
+        if not (vf.exists() and raw.exists()):
+            continue
+        before = json.loads(raw.read_text())
+        before = before["findings"] if isinstance(before, dict) else before
+        after_doc = json.loads(vf.read_text())
+        after = after_doc.get("findings", [])
+        kb = {i for f in before for i in match(f)[:1]}
+        ka = {i for f in after for i in match(f)[:1]}
+        rows.append({
+            "run": run.name,
+            "mode": after_doc.get("mode"),
+            "verdicts": after_doc.get("verdicts", {}),
+            "n_before": len(before), "n_after": len(after),
+            "known_before": len(kb), "known_after": len(ka),
+            "known_perdidos": sorted(kb - ka),
+        })
+    if not rows:
+        print("nenhuma execução com triagem do Jev ainda")
+        return
+    print(f"\n{'execução':12}{'modo':7}{'achados':>12}{'known':>10}  veredictos")
+    print("-" * 68)
+    for r in rows:
+        print(f"{r['run']:12}{str(r['mode']):7}"
+              f"{r['n_before']:>5} -> {r['n_after']:<4}"
+              f"{r['known_before']:>5} -> {r['known_after']:<4}  "
+              + ", ".join(f"{k}={v}" for k, v in sorted(r["verdicts"].items())))
+        if r["known_perdidos"]:
+            print(f"{'':12}FALSA REJEIÇÃO: {', '.join(r['known_perdidos'])}")
+    total_lost = sum(len(r["known_perdidos"]) for r in rows)
+    dropped = sum(r["n_before"] - r["n_after"] for r in rows)
+    print("-" * 68)
+    print(f"descartados no total: {dropped}  |  defeitos conhecidos perdidos: {total_lost}")
+    if dropped and not total_lost:
+        print("o Jev só tirou achados fora do known set — ou falso positivo, ou defeito novo.")
+        print("auditar os descartados à mão antes de creditar precisão ao verificador.")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if not args or args[0] == "--matrix":
         matrix()
     elif args[0] == "--diversity":
         diversity()
+    elif args[0] == "--verify-effect":
+        verify_effect()
     else:
         for a in args:
             report(Path(a) if Path(a).is_absolute() else HERE / a)

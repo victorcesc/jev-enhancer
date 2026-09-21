@@ -9,22 +9,18 @@ set -euo pipefail
 
 REPS="${1:-3}"
 EXP="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$EXP/../.." && pwd)"
+JEV="$(cd "$EXP/../.." && pwd)"
+export JEV
 
-# A chave pode vir do ambiente ou de um .env gitignorado — assim ela nunca
-# precisa ser digitada numa linha de comando que fica no histórico.
-if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$ROOT/.env" ]; then
-  set -a; . "$ROOT/.env"; set +a
-fi
-
-if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+# shellcheck disable=SC1091
+if ! . "$EXP/env.sh"; then
   cat >&2 <<EOF
-ANTHROPIC_API_KEY não está definida — toda execução falharia em ~2s com
-"Not logged in". Coloque a chave em $ROOT/.env (já está no .gitignore):
+Sem credencial. Coloque em $JEV/.env (já está no .gitignore):
 
-    ANTHROPIC_API_KEY=sk-ant-...
+    ANTHROPIC_API_KEY=sk-ant-api03-...     # chave de API
+    CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-... # ou token OAuth
 
-e rode de novo.
+O env.sh roteia pelo prefixo, então qualquer um dos dois nomes serve.
 EOF
   exit 1
 fi

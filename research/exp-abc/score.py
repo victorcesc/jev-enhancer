@@ -120,6 +120,50 @@ def seconds(run: Path):
     return int(p.read_text().strip()) if p.exists() else None
 
 
+PROJECT_DIR = Path.home() / ".claude/projects/-Users-cesc-Projects-pdv-feat-baseline"
+
+_TOK = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+
+
+def _transcript_tokens(path: Path):
+    """Tokens de um transcript, deduplicando por message.id.
+
+    A dedupe não é opcional: o mesmo assistant message aparece várias vezes no
+    .jsonl, e somar tudo infla o total em ~2x. Já reportei número errado por
+    causa disso uma vez.
+    """
+    seen = {}
+    try:
+        for line in path.read_text().splitlines():
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            m = d.get("message") or {}
+            if d.get("type") == "assistant" and m.get("id"):
+                seen[m["id"]] = m.get("usage") or {}
+    except Exception:
+        return 0, 0
+    return sum(sum(u.get(k, 0) for k in _TOK) for u in seen.values()), len(seen)
+
+
+def subagent_cost(session_id: str):
+    """Custo dos subagentes desta sessão — invisível no result.json.
+
+    O braço B move a análise inteira para um subagente, que tem transcript
+    separado. Ignorar isso faz o braço B parecer ~10x mais barato do que é.
+    """
+    d = PROJECT_DIR / (session_id or "") / "subagents"
+    if not d.is_dir():
+        return 0, 0
+    tot = turns = 0
+    for f in d.glob("*.jsonl"):
+        t, n = _transcript_tokens(f)
+        tot += t
+        turns += n
+    return tot, turns
+
+
 def usage(run: Path):
     p = run / "result.json"
     if not p.exists():
@@ -129,9 +173,10 @@ def usage(run: Path):
     except Exception:
         return {}
     u = d.get("usage") or {}
-    tot = sum(u.get(k, 0) for k in
-              ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
-    return {"cost_usd": d.get("total_cost_usd"), "tokens": tot,
+    main = sum(u.get(k, 0) for k in _TOK)
+    sub, sub_turns = subagent_cost(d.get("session_id"))
+    return {"cost_usd": d.get("total_cost_usd"), "tokens": main + sub,
+            "main_tokens": main, "sub_tokens": sub, "sub_turns": sub_turns,
             "output_tokens": u.get("output_tokens"), "turns": d.get("num_turns")}
 
 
@@ -145,8 +190,11 @@ def report(run: Path):
     print(f"achados: {s['n_findings']}  |  known encontrados: {len(s['found_known'])}/{KNOWN['known_total']}"
           f"  (recall {s['recall']:.0%}, ponderado por severidade {s['sev_recall']:.0%})")
     if u:
-        print(f"tokens: {u.get('tokens'):,}  custo: ${u.get('cost_usd') or 0:.2f}  "
-              f"turnos: {u.get('turns')}  tempo: {seconds(run)}s")
+        extra = (f"  (principal {u['main_tokens']:,} + subagente {u['sub_tokens']:,}"
+                 f" em {u['sub_turns']} turnos)" if u.get("sub_tokens") else "")
+        print(f"tokens: {u.get('tokens'):,}{extra}")
+        print(f"custo: ${u.get('cost_usd') or 0:.2f}  turnos principais: {u.get('turns')}"
+              f"  tempo: {seconds(run)}s")
     print(f"achou: {', '.join(s['found_known'])}")
     print(f"perdeu: {', '.join(s['missed_known'])}")
     if s["unmatched"]:

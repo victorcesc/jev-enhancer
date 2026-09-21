@@ -1,13 +1,19 @@
 # Known defect set — NÃO é ground truth absoluta.
 #
-# São os 14 defeitos distintos que dois reviews independentes acharam no
-# snapshot `fiado` e que EU verifiquei manualmente no código, um a um.
-# Um terceiro review pode achar defeitos novos: quando achar e a verificação
-# confirmar, o defeito entra aqui e `known_total` sobe.
+# São os defeitos distintos que reviews independentes acharam no snapshot
+# `fiado` e que EU verifiquei manualmente no código, um a um. O conjunto
+# CRESCE: quando um review acha algo real que ninguém tinha achado e a
+# verificação confirma, o defeito entra aqui e `known_total` sobe.
 #
-# Proveniência dos 14: união de dois reviews (ver docs/COMPARACAO-JUSTA.md).
-# Ambos estavam limitados a 10 achados pelo protocolo, então este conjunto
-# é quase certamente INCOMPLETO — é um piso, não um teto.
+# Histórico:
+#   14 — união dos dois reviews-piloto (ver docs/COMPARACAO-JUSTA.md), ambos
+#        limitados a 10 achados pelo protocolo
+#   +3 — b-1, a primeira execução com teto de 20: isenção de X-API-Key num
+#        namespace inteiro, regras de SQL só cobertas por teste que pula sem
+#        Postgres, e ramo 401 inalcançável
+#
+# Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
+# este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
 
 snapshot:
   repo: pdv-feat-baseline
@@ -15,7 +21,10 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 14
+# 14 originais (união dos dois reviews-piloto) + 2 descobertos em b-1 e
+# verificados por mim no código. O conjunto cresce quando um review acha algo
+# real que ninguém tinha achado — por isso `known_total` é versionado aqui.
+known_total: 17
 
 defects:
   - id: sqlc-not-generated
@@ -63,7 +72,9 @@ defects:
     detail: >
       writeFiadoFailure tem um caminho para erro que não é *apperror.AppError,
       mas o teste injeta um AppError, então errors.As sempre casa.
-    match_any: ["fallback", "errors.as", "não-apperror", "nao-apperror", "ramo", "internal_error"]
+    # "ramo" sozinho é genérico demais: casava também com o ramo 401 de
+    # CustomerFiado, que é outro defeito. Critério agora exige o símbolo.
+    match_any: ["fallback", "errors.as", "não-apperror", "nao-apperror", "writefiadofailure", "internal_error"]
 
   - id: numericfloat-swallows-error
     severity: med
@@ -137,6 +148,42 @@ defects:
       < s.total); a API usa COALESCE(p.total_paid,0) < s.total. Divergem para
       venda com total <= 0 e sem pagamento.
     match_any: ["paridade", "parity", "sale_repository", "desktop", "is null or"]
+
+  # --- descobertos em b-1 (teto de achados em 20), verificados no código ---
+
+  - id: bearer-exempts-whole-namespace
+    severity: med
+    file: packages/api-go/internal/middleware/routes.go
+    title: "isenção de X-API-Key aplicada a um namespace versionado inteiro"
+    detail: >
+      As outras entradas de bearerRoutePrefixes são rotas específicas
+      (/sync/, /invoices/, /notas/, /auth/me). A nova é /api/v1/customers/,
+      um namespace inteiro: qualquer rota futura montada sob ele herda a
+      isenção sem decisão explícita. Verificado em routes.go:17-23.
+    match_any: ["bearerrouteprefixes", "namespace", "isenta", "isencao", "x-api-key", "/api/v1/customers/"]
+
+  - id: sql-rules-only-in-skippable-test
+    severity: med
+    file: packages/api-go/internal/db/fiado_integration_test.go
+    title: "regras de negócio do fiado só cobertas por teste que pula sem Postgres"
+    detail: >
+      is_credit/status/COALESCE(total_paid)/ORDER BY só são exercitados no
+      teste de integração, e testutil.OpenDB faz t.Skip sem TEST_DATABASE_URL.
+      Os unitários usam stubStore e nunca avaliam SQL. No CI padrão a
+      cobertura dessas exclusões é zero. Verificado em
+      testutil/db_integration.go:28 e fiado/pending_test.go:23.
+    match_any: ["t.skip", "test_database_url", "opendb", "stubstore", "sem postgres", "cobertura efetiva"]
+
+  - id: unauth-branch-unreachable
+    severity: low
+    file: packages/api-go/internal/handler/fiado.go
+    title: "ramo 401 UNAUTHENTICATED inalcançável e sem teste"
+    detail: >
+      CustomerFiado trata `userID, ok := auth.UserIDFromContext(...)` com 401
+      quando !ok, mas MountFiado sempre aplica apimw.Bearer (fiado_router.go:21),
+      que aborta antes ou injeta o userID. Nenhum teste monta o handler sem o
+      middleware. Verificado no código.
+    match_any: ["unauthenticated", "useridfromcontext", "inalcancavel", "inalcançável", "codigo morto", "código morto"]
 
   - id: single-letter-params
     severity: low

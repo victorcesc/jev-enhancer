@@ -1,0 +1,192 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 12,
+    "needs_context": 1,
+    "rejected": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 5,
+      "symbol": "GetCustomerByUserIDAndID",
+      "issue": "As tres queries novas nunca foram geradas pelo sqlc: nao existe internal/db/fiado.sql.go. go build ./... falha com [undefined: db.GetCustomerByUserIDAndIDParams] e mais 7 erros em internal/fiado/pending.go, e go vet falha em internal/db/fiado_integration_test.go:107 com [queries.GetCustomerByUserIDAndID undefined]. O pacote api-go inteiro (fiado, handler, cmd/server, db_test) nao compila e nenhum teste do diff roda. Falta rodar make -C packages/api-go sqlc e commitar internal/db/fiado.sql.go mais querier.go/db.go regenerados (AGENTS.md: Go DB/query change: run make sqlc, then make test).",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.9,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.52
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O teste cria otherUserID/otherCustomerID sob o comentario [Same customer id must not match another user sales], mas nunca chama ListPendingFiadoSalesByCustomer nem Summarize com UserID: otherUserID e CustomerID: customerID (o customer do primeiro usuario). Se o predicado AND s.user_id = sqlc.arg(user_id) for removido das duas queries, todos os testes (integracao, unit com stub e handler) continuam verdes: o isolamento multi-tenant da LISTAGEM nao esta coberto, apenas o do GetCustomerByUserIDAndID. Vazamento de fiado entre tenants passaria despercebido.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.78,
+        "severity_score": 2.83,
+        "evidence_sufficient": 0.56
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 32,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Toda a regra de negocio do fiado (is_credit TRUE, status completed, COALESCE(total_paid,0) menor que total, ORDER BY sale_date DESC, paginacao) so e verificada neste teste, que chama testutil.OpenDB e da t.Skip quando TEST_DATABASE_URL/DATABASE_URL nao esta setado. Os testes unitarios em internal/fiado/pending_test.go usam stubStore e nunca avaliam o SQL. Em make test sem Postgres a cobertura efetiva das exclusoes de venda quitada, a vista e cancelada e ZERO: uma regressao que remova AND s.is_credit = TRUE, vazando vendas a vista como divida, passa verde no CI padrao.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 2.62,
+        "evidence_sufficient": 0.57
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "timestamptzTime retorna (time.Time, bool) mas o unico chamador descarta o bool via saleDate, _ := timestamptzTime(row.SaleDate). Um sale_date NULL ou invalido vira time.Time zero e e serializado como 0001-01-01T00:00:00Z em vez de erro ou null; o segundo retorno e codigo morto. Mesma falha silenciosa em numericFloat na linha 94: se Float64Value falhar ou o valor nao for Valid, o valor monetario vira 0, ou seja saldo e total_devido de fiado aparecem como 0,00 (cliente nao deve nada) em vez de sinalizar erro. Nenhum teste exercita esses caminhos: todos os stubs usam numerics e timestamps validos.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.9,
+        "severity_score": 2.39,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O LEFT JOIN usa uma subquery agregada sem correlacao: SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id. O Postgres nao consegue empurrar s.user_id/s.customer_id para dentro do GROUP BY, entao agrega a tabela payments INTEIRA (todos os tenants) a cada requisicao, e duas vezes por request, pois SummarizePendingFiadoSalesByCustomer (linha 48) repete o mesmo padrao. Com payments grande, um GET /api/v1/customers/{id}/fiado vira seq scan mais hash aggregate completo. O equivalente no desktop (sale_repository.rs) e aceitavel porque o SQLite e local e mono-tenant; na nuvem nao e. Preferir LATERAL ou subquery correlacionada por s.id (existe indice payments_sale_id_idx).",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.28,
+        "evidence_sufficient": 0.58
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "As entradas existentes sao rotas especificas (/sync/, /invoices/, /notas/, /auth/me); a nova entrada isenta um NAMESPACE versionado inteiro (/api/v1/customers/) da checagem de X-API-Key sempre que houver um header Authorization Bearer qualquer. Qualquer rota futura montada sob /api/v1/customers/ herda a isencao sem decisao explicita. O teste novo [fiado with bearer skips API key] usa um token sintetico (Bearer token_1_123) apenas para provar o casamento de prefixo, nao demonstra autenticacao real, entao a isencao parece mais segura do que e.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.69,
+        "severity_score": 2.18,
+        "evidence_sufficient": 0.47
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 65,
+      "symbol": "Page.TotalPages",
+      "issue": "TotalPages so protege total menor ou igual a zero; divide por int64(p.Limit) sem checar Limit igual a zero. Page tem campos exportados e ListPending aceita qualquer Page sem revalidar, entao um fiado.Page vazio (ou montado fora de NewPage) com summary.TotalSales maior que zero causa panic de integer divide by zero dentro do handler. O mesmo vale para Offset() na linha 55, que faz int32((Number-1)*Limit) sem guarda de overflow. O invariante de sempre construir via NewPage nao e forcado por nada (nem campo nao-exportado, nem validacao) e nenhum teste cobre Page zero-value.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 2.17,
+        "evidence_sufficient": 0.75
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "ListPending",
+      "issue": "O summary (COUNT e SUM) e a listagem paginada sao duas queries independentes fora de transacao. Se um pagamento quitar uma venda entre as duas chamadas, pagination.total, total_pages e total_devido ficam inconsistentes com o data retornado (por exemplo total 5 com pagina vazia, ou total_devido maior que a soma dos saldos listados). Para um endpoint de divida isso mostra ao usuario um total que nao bate com as linhas. Nenhum teste cobre divergencia entre summary e rows: o stub sempre devolve os dois coerentes.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 2.11,
+        "evidence_sufficient": 0.66
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "ListPending",
+      "issue": "Os tres pontos de falha de store (linhas 42, 50 e 73) descartam o erro original: retornam internalError() sem %w e sem log. Como writeFiadoFailure no handler tambem nao loga, um 500 em GET /api/v1/customers/{id}/fiado nao deixa NENHUM rastro do erro de banco, nem no handler nem no service. Viola os invariantes do AGENTS.md (Wrap inspectable errors with %w e Return errors from lower layers and log at process or handler boundaries). O middleware/bearer.go ja faz o certo: LoggerFromContext(ctx).Error com a chave err.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.92,
+        "severity_score": 1.85,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 196,
+      "symbol": "TestCustomerFiado_requiresBearerToken",
+      "issue": "Erros de autenticacao vem do apimw.Bearer via apperror, que escreve as chaves error e code, enquanto o handler fiado escreve success, message e code (fiado.FailureResponse). O MESMO endpoint devolve dois formatos de erro diferentes conforme a falha seja 401 do middleware ou 4xx/5xx do handler, e o teste so confere rec.Code, nunca o corpo: a divergencia de contrato fica invisivel para o cliente que le success e message.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 1.79,
+        "evidence_sufficient": 0.36
+      },
+      "verdict": "needs_context"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 124,
+      "symbol": "TestCustomerFiado_responseKeys",
+      "issue": "O teste que existe para travar o contrato JSON verifica as chaves de topo e as de data[0], mas nunca desce em pagination: page, limit, total e total_pages poderiam ser renomeadas (por exemplo para totalPages) sem quebrar nenhum teste. Alem disso items[0] e indexado sem checar len(items) maior que zero, entao um data vazio vira panic em vez de falha legivel.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.81,
+        "severity_score": 1.4,
+        "evidence_sufficient": 0.76
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 176,
+      "symbol": "TestCustomerFiado_invalidParams",
+      "issue": "O teste assegura menos do que aparenta: verifica apenas rec.Code igual a 400 e lister.gotCustomerID diferente de zero. Nunca desserializa o corpo, entao nao compara success false nem code VALIDATION_ERROR; uma regressao que responda 400 com corpo vazio, HTML ou shape diferente passa. Alem disso gotCustomerID e o zero-value do stub, entao a assercao de que o service nao foi chamado e vacua para os casos non numeric id e zero id, em que o customerID parseado seria 0 de qualquer forma.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 1.34,
+        "evidence_sufficient": 0.7
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 64,
+      "symbol": "writeFiadoFailure",
+      "issue": "O ramo de fallback para erro que nao e AppError (500 generico com FailureResponse) nunca e exercitado: TestCustomerFiado_unknownCustomerIs404 e TestCustomerFiado_serviceFailureIs500 injetam apperror.AppError, e TestListPending_storeFailures tambem so produz AppError. A interface PendingFiadoLister aceita qualquer error, entao esse caminho e alcancavel em producao e fica sem teste de status nem de shape do corpo.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.65,
+        "severity_score": 1.12,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed"
+    }
+  ]
+}

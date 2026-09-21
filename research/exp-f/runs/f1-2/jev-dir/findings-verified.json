@@ -1,0 +1,219 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 13
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 1,
+      "symbol": "GetCustomerByUserIDAndID/ListPendingFiadoSalesByCustomer/SummarizePendingFiadoSalesByCustomer",
+      "issue": "O sqlc nunca foi regenerado: nao existe packages/api-go/internal/db/fiado.sql.go, e nem Querier nem *db.Queries ganharam os metodos/tipos das 3 queries novas. Verificado: `go build ./...` e `go vet ./...` falham com 8 erros `undefined: db.GetCustomerByUserIDAndIDParams / db.ListPendingFiadoSalesByCustomerParams / db.ListPendingFiadoSalesByCustomerRow / db.SummarizePendingFiadoSalesByCustomerParams / db.SummarizePendingFiadoSalesByCustomerRow` em internal/fiado/pending.go:18-20,35,45,66, alem de `queries.GetCustomerByUserIDAndID undefined` em internal/db/fiado_integration_test.go:107. Ou seja: `make build`, `make test` e `make test-integration` estao quebrados e a feature inteira (incluindo fiado.NewPendingService(queries) em cmd/server/main.go:157) nao compila. AGENTS.md exige rodar `make -C packages/api-go sqlc` e commitar o resultado para mudancas de query.",
+      "kind": "bug",
+      "severity": "high",
+      "from_candidate": "db-1",
+      "jev": {
+        "valid": 0.91,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.51
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.91)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O comentario promete 'Same customer id must not match another user's sales', mas o isolamento por tenant das duas queries de fiado nunca e exercitado. otherCustomerID e um SERIAL novo (diferente de customerID), e os unicos casos cross-user sao: (a) GetCustomerByUserIDAndID(customerID, otherUserID), que testa a query do cliente, nao as de venda; e (b) Summarize(otherUserID, otherCustomerID), onde o proprio customer_id ja nao casa com nenhuma venda. Nenhum subteste chama ListPendingFiadoSalesByCustomer/SummarizePendingFiadoSalesByCustomer com UserID=otherUserID e CustomerID=customerID. Consequencia: se `AND s.user_id = sqlc.arg(user_id)` fosse removido de query/fiado.sql:34 e :53 (vazamento de fiado entre tenants), a suite inteira continuaria verde.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "tests-64",
+      "jev": {
+        "valid": 0.84,
+        "severity_score": 2.61,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.84)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer",
+      "issue": "As duas queries fazem LEFT JOIN com uma subquery agregada sem nenhum predicado (`SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id`, linhas 29-33 e 48-52). O filtro externo (`s.user_id`, `s.customer_id`) esta numa clausula de JOIN, nao numa restricao sobre `p` sozinha, entao o Postgres nao consegue empurra-lo para dentro da subquery agrupada nem gerar caminho parametrizado. Resultado: cada GET /api/v1/customers/{id}/fiado agrega a tabela `payments` inteira, de todos os tenants, para devolver no maximo 100 linhas. O indice payments_sale_id_idx nao ajuda. A forma correta e um subselect correlacionado por venda ou LEFT JOIN LATERAL filtrado por s.id.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "db-5",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 2.39,
+        "evidence_sufficient": 0.61
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.83)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "ListPending",
+      "issue": "As tres chamadas ao banco (GetCustomer, Summarize, List) correm fora de transacao/snapshot. Como pagination.total e total_devido vem do Summarize e data[] vem de um SELECT posterior, um pagamento ou venda concorrente faz a resposta ficar internamente inconsistente: por exemplo total=3/total_pages=2 com a ultima pagina devolvendo 0 linhas, ou total_devido que nao bate com a soma dos saldos listados. Nenhum teste cobre esse desencontro.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "db-29",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 1.97,
+        "evidence_sufficient": 0.58
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.83)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "ListPending / internalError",
+      "issue": "Nos tres caminhos de falha do banco (linhas 42, 50 e 73) o erro original e descartado: `return PendingResponse{}, internalError()` nao faz wrap com %w nem loga. O handler (handler/fiado.go:62 writeFiadoFailure) tambem so serializa Message/Code, sem logar. Assim um erro de conexao/SQL vira um 500 generico sem nenhum rastro em log nem em nenhum lugar — impossivel diagnosticar em producao. Viola AGENTS.md ('Return errors from lower layers and log at process or handler boundaries', 'Wrap inspectable errors with %w') e .cursor/rules/RULES.md. Observacao: internal/sync/initial.go tem o mesmo defeito, entao o codigo novo replicou um padrao ruim existente em vez de corrigi-lo.",
+      "kind": "rule",
+      "severity": "low",
+      "from_candidate": null,
+      "jev": {
+        "valid": 0.92,
+        "severity_score": 1.96,
+        "evidence_sufficient": 0.7
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.92)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 206,
+      "symbol": "TestListPending_customerOfAnotherUserIs404",
+      "issue": "O comentario diz 'A customer owned by another user must not leak: the query filters by user_id', mas o teste usa stubStore, cujo GetCustomerByUserIDAndID devolve pgx.ErrNoRows sempre que os parametros nao batem com o stub. O teste assegura apenas que o servico mapeia ErrNoRows -> 404, exatamente o mesmo que TestListPending_unknownCustomerIs404 (linha 199). Nada sobre o predicado user_id do SQL e verificado aqui, e o teste de integracao tambem nao cobre (ver achado tests-64). O teste assegura menos do que aparenta.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-66",
+      "jev": {
+        "valid": 0.79,
+        "severity_score": 1.64,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.79)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 55,
+      "symbol": "Page.Offset",
+      "issue": "Offset() calcula `(p.Number - 1) * p.Limit` em `int` e trunca para int32 sem checagem. O invariante que torna isso seguro (MaxPage=1_000_000, MaxLimit=100 -> 99_999_900) so e imposto por NewPage, mas os campos Number/Limit sao exportados e o doc-comment e a unica barreira. Qualquer construcao direta de fiado.Page (ja acontece em page_test.go:141) com Number grande produz OFFSET negativo silencioso e erro do Postgres em runtime. Ou os campos viram nao exportados com acessores, ou Offset() precisa de clamp.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "contracts-13",
+      "jev": {
+        "valid": 0.7,
+        "severity_score": 1.3,
+        "evidence_sufficient": 0.76
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.70)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 38,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O cabecalho do arquivo (linha 2) afirma paridade com SaleRepository::find_pending_credit_sales_by_customer. O Rust (packages/desktop/src-tauri/src/repositories/sale_repository.rs:199) usa `(p.total_paid IS NULL OR p.total_paid < s.total)`; o SQL novo usa `COALESCE(p.total_paid, 0) < s.total` (linhas 38 e 57). Divergem quando s.total = 0: a venda fiado sem pagamento aparece no desktop (NULL -> true) e some na API (0 < 0 -> false). Mesma divergencia para total negativo. Nenhum teste cobre total = 0.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "behaviour-32",
+      "jev": {
+        "valid": 0.75,
+        "severity_score": 1.23,
+        "evidence_sufficient": 0.87
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler packages/desktop/src-tauri/src/repositories/sale_repository.rs",
+      "resolved_by": "retrieval"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 115,
+      "symbol": "TestListPending_success",
+      "issue": "O teste afirma len(out.Data) == 2 mas so inspeciona out.Data[0] (linhas 119-125). A segunda linha do stub (ID 9, total 60/pago 0/saldo 60) nunca e comparada, entao nem a ordem preservada entre rows e out.Data nem o mapeamento de campos do segundo item sao verificados. Um bug que sobrescrevesse todos os itens com o primeiro passaria.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-60",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 1.23,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 64,
+      "symbol": "writeFiadoFailure",
+      "issue": "O ramo de fallback para erro que nao e *apperror.AppError (500 generico com mensagem fixa) nunca e exercitado: todos os testes em fiado_router_test.go injetam apperror.New (TestCustomerFiado_unknownCustomerIs404, TestCustomerFiado_serviceFailureIs500) e PendingService so retorna AppError. Se o mapeamento de status/corpo desse ramo regredir, nenhum teste falha.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": null,
+      "jev": {
+        "valid": 0.61,
+        "severity_score": 0.88,
+        "evidence_sufficient": 0.66
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.61)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 26,
+      "symbol": "CustomerFiado",
+      "issue": "O ramo UNAUTHENTICATED e inalcancavel: MountFiado (fiado_router.go:22) sempre aplica apimw.Bearer, e bearerMiddleware.handle (middleware/bearer.go) so chama next depois de auth.WithUserID, rejeitando qualquer requisicao sem token valido. A unica excecao e o preflight OPTIONS, que nao casa com r.Get. Nenhum teste menciona 'UNAUTHENTICATED'. E codigo morto que da falsa sensacao de cobertura de auth no handler.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-28",
+      "jev": {
+        "valid": 0.63,
+        "severity_score": 0.69,
+        "evidence_sufficient": 0.84
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler middleware/bearer.go",
+      "resolved_by": "retrieval"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "productID",
+      "issue": "productID e semeado (INSERT em products) e nunca usado: nenhuma linha de sale_items e criada e a variavel nao aparece em nenhuma asercao. Setup morto que sugere cobertura de vendas com itens que nao existe.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-61",
+      "jev": {
+        "valid": 0.84,
+        "severity_score": 0.35,
+        "evidence_sufficient": 0.77
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.84)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat / timestamptzTime",
+      "issue": "numericFloat (linha 94) e timestamptzTime (linha 102) sao copias byte a byte de internal/sync/pgconv.go:11 e :34. Com a copia do teste (internal/db/fiado_integration_test.go:19) sao tres implementacoes da mesma conversao pgtype.Numeric -> float64. AGENTS.md pede 'use existing libraries/patterns first'; o natural seria promover esses helpers a um pacote compartilhado (ex.: internal/pgconv) em vez de triplicar.",
+      "kind": "rule",
+      "severity": "low",
+      "from_candidate": "behaviour-15",
+      "jev": {
+        "valid": 0.68,
+        "severity_score": 0.24,
+        "evidence_sufficient": 0.82
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler internal/sync/pgconv.go",
+      "resolved_by": "retrieval"
+    }
+  ]
+}

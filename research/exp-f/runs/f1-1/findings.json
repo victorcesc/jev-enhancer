@@ -1,0 +1,112 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "issue": "O código sqlc para as três queries novas nunca foi gerado: não existe packages/api-go/internal/db/fiado.sql.go e internal/db/querier.go (gerado, emit_interface: true) não lista GetCustomerByUserIDAndID / ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer. Verificado: `go build ./...` e `go vet ./...` falham com 8 erros `undefined: db.GetCustomerByUserIDAndIDParams`, `undefined: db.ListPendingFiadoSalesByCustomerRow`, etc., e internal/db/fiado_integration_test.go:107 falha com `queries.GetCustomerByUserIDAndID undefined`. O módulo inteiro não compila — `make -C packages/api-go build` e `make -C packages/api-go test` quebram, logo NENHUM dos testes novos (fiado, handler, middleware) roda. Falta rodar `make -C packages/api-go sqlc` e commitar o artefato, exatamente o que AGENTS.md exige para mudanças de query.",
+      "kind": "bug",
+      "severity": "high",
+      "from_candidate": "db-1"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O comentário promete \"Same customer id must not match another user's sales\", mas nenhum teste exercita isolamento multi-tenant nas queries de vendas. otherCustomerID é um id DIFERENTE (customers é SERIAL) e nenhuma venda é semeada para otherUserID; a única asserção que usa o par otherUserID/otherCustomerID é o subteste 'with no open sales', que retornaria 0 mesmo sem filtro de user_id, porque não há nenhuma venda com aquele customer_id. ListPendingFiadoSalesByCustomer nunca é chamada com combinação cross-user. Consequência verificável: remover `AND s.user_id = sqlc.arg(user_id)` das DUAS queries em query/fiado.sql deixa toda a suíte de integração passando — vazamento de fiado entre tenants não seria detectado.",
+      "kind": "bug",
+      "severity": "high",
+      "from_candidate": "tests-64"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 206,
+      "symbol": "TestListPending_customerOfAnotherUserIs404",
+      "issue": "O comentário afirma \"A customer owned by another user must not leak: the query filters by user_id\", mas o teste assegura menos do que aparenta: ele usa stubStore.GetCustomerByUserIDAndID, cuja comparação `arg.UserID != s.customer.UserID` é do próprio stub. O teste valida o stub, não o SQL de produção nem o filtro user_id das queries de vendas. Combinado com o achado anterior (o teste de integração também não cobre isso, e é pulado sem TEST_DATABASE_URL via testutil.OpenDB → t.Skip), o invariante de isolamento por tenant do endpoint fica sem cobertura real em qualquer nível.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "tests-66"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "A subquery `SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id` não tem WHERE nenhum e agrega a tabela payments inteira (de todos os tenants). O predicado externo (s.user_id / s.customer_id) e a condição de junção `p.sale_id = s.id` não podem ser empurrados para dentro de um subselect agregado pelo planner do Postgres, então cada requisição faz HashAggregate sobre um seq scan completo de payments — e são DUAS dessas queries por requisição (List + Summarize). O índice payments_sale_id_idx existente fica inútil. Escala linearmente com o volume global de pagamentos, não com o do cliente consultado. Uma subquery correlacionada / LATERAL filtrada por s.id resolveria.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "db-5"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "internalError",
+      "issue": "Os três caminhos de falha de banco (linhas 42, 50, 73) descartam completamente o erro do pgx: internalError() constrói um AppError genérico sem `%w` e sem log. O handler (handler/fiado.go writeFiadoFailure) também só serializa o AppError. O access log (middleware/logging.go:45) apenas registra `status=500` sem causa. Resultado: uma indisponibilidade de banco, um timeout de contexto ou um erro de tipo na query produzem 500 sem NENHUM rastro diagnosticável em log algum. Viola duas regras explícitas do AGENTS.md: \"Return errors from lower layers and log at process or handler boundaries\" e \"Wrap inspectable errors with %w\". Note que middleware/bearer.go faz certo (LoggerFromContext(...).Error(\"bearer user lookup failed\", \"err\", err)).",
+      "kind": "rule",
+      "severity": "med",
+      "from_candidate": "repo_rules-48"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 55,
+      "symbol": "Page.Offset",
+      "issue": "Offset() faz `int32((p.Number - 1) * p.Limit)` sem checagem de faixa. O comentário na linha 6 diz que MaxPage garante o invariante, mas MaxPage só é aplicado dentro de NewPage; Page tem campos EXPORTADOS (Number, Limit) e é construível diretamente fora do pacote — os próprios testes fazem isso (pending_test.go usa fiado.Page{...} e page_test.go usa fiado.Page{Number: 3, Limit: 20}). Um Page{Number: 1<<28, Limit: 100} produz overflow para um OFFSET negativo, que o Postgres rejeita com ERROR 2201X (\"OFFSET must not be negative\") → 500 opaco. O invariante deveria ser imposto pelo tipo (campos não exportados + acessores) ou revalidado em Offset().",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "contracts-13"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "issue": "SummarizePendingFiadoSalesByCustomer (linha 45) e ListPendingFiadoSalesByCustomer (linha 66) são duas leituras independentes, fora de transação e sem snapshot consistente. Num PDV, pagamentos de fiado são gravados concorrentemente: se um pagamento quitar uma venda entre as duas queries, o corpo devolve `pagination.total`/`total_pages`/`total_devido` de um conjunto e `data` de outro. Pior, sob paginação, uma venda pode ser pulada ou duplicada entre páginas consecutivas porque o OFFSET desliza. Uma única query com window function (COUNT(*) OVER (), SUM(...) OVER ()) ou pool.BeginTx com REPEATABLE READ elimina a divergência.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "db-29"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 203,
+      "symbol": "TestCustomerFiado_requiresBearerToken",
+      "issue": "O teste só verifica `rec.Code != http.StatusUnauthorized` e nunca inspeciona o corpo. Isso esconde uma inconsistência real de contrato: o 401 vem do middleware Bearer via apperror.TokenNotProvided → apperror.WriteJSON, que emite {\"error\":\"Token não fornecido\",\"code\":\"UNAUTHORIZED\"} — SEM campo `success` e com `error` em vez de `message` — enquanto todas as outras falhas do mesmo endpoint (400/404/500, via writeFiadoFailure) emitem fiado.FailureResponse {\"success\":false,\"message\":...,\"code\":...}. Um cliente que faça parse de `success`/`message` quebra exatamente no caso de token ausente/expirado, e nenhum teste detecta.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": null
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 118,
+      "symbol": "TestListPending_success",
+      "issue": "O teste assere `len(out.Data) != 2` mas só inspeciona out.Data[0] (SaleID, Data, ValorOriginal, ValorPago, Saldo). O segundo elemento nunca é comparado, então nada verifica (a) que o mapeamento row→PendingSale está correto para linhas subsequentes e (b) que ListPending preserva a ordem devolvida pelo banco — a ordenação sale_date DESC é o contrato visível do endpoint e poderia ser invertida sem quebrar nenhum teste unitário.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-60"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 27,
+      "symbol": "CustomerFiado",
+      "issue": "O ramo `if !ok { ... \"UNAUTHENTICATED\" }` é inalcançável na prática e sem cobertura: MountFiado (fiado_router.go:22) sempre envolve a rota com apimw.Bearer, que aborta antes do handler quando o token falta/é inválido e sempre chama auth.WithUserID quando passa. A string \"UNAUTHENTICATED\" não aparece em nenhum arquivo _test. Ou o ramo é dead code defensivo (e o comentário deveria dizer isso), ou falta um teste chamando handler.CustomerFiado diretamente com um request sem user id em contexto.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-28"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 2,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O comentário afirma \"Paridade com SaleRepository::find_pending_credit_sales_by_customer (desktop)\", mas as duas implementações divergem no predicado de saldo. O desktop (packages/desktop/src-tauri/src/repositories/sale_repository.rs:199) usa `(p.total_paid IS NULL OR p.total_paid < s.total)`; a query Go usa `COALESCE(p.total_paid, 0) < s.total`. Para uma venda a crédito com total = 0.00 e nenhum pagamento, o desktop a lista (IS NULL → TRUE) e a API a exclui (0 < 0 → FALSE). A versão Go é a mais sensata, mas a afirmação de paridade é falsa e nenhum teste cobre total = 0.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "behaviour-32"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "productID",
+      "issue": "productID é semeado (INSERT em products) e nunca lido depois — nenhum sale_item é criado e nenhuma query do fiado toca products ou sale_items. É setup morto que dá a impressão falsa de que o cenário cobre vendas com itens. Verificado: as 2 únicas ocorrências do identificador no arquivo são a declaração e o Scan.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-61"
+    }
+  ]
+}

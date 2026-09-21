@@ -1,0 +1,103 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "issue": "A branch does not compile: query/fiado.sql was added but sqlc was never regenerated, so internal/db/fiado.sql.go does not exist. `go build ./...` from packages/api-go fails with 8 errors (undefined: db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams, db.ListPendingFiadoSalesByCustomerRow, db.SummarizePendingFiadoSalesByCustomerParams, db.SummarizePendingFiadoSalesByCustomerRow) and `go vet ./...` additionally fails on internal/db/fiado_integration_test.go:107 (queries.GetCustomerByUserIDAndID undefined). Nothing in this feature — binary, unit tests or integration tests — can run. Fix: run `make -C packages/api-go sqlc` and commit internal/db/fiado.sql.go plus the regenerated querier.go, as AGENTS.md requires for every query change.",
+      "kind": "bug",
+      "severity": "high",
+      "from_candidate": "db-1"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "The comment promises 'Same customer id must not match another user's sales', but the test never exercises the `s.user_id` predicate of ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer. otherCustomerID is a fresh SERIAL (so it is NOT the same id as customerID) and no sale is ever seeded for otherUserID, so the 'no open sales' subtest returns 0 for trivial reasons. Deleting `AND s.user_id = sqlc.arg(user_id)` from both queries in query/fiado.sql leaves every assertion in this file green. Tenant isolation of the sales queries — the security-relevant part — is uncovered. Seed a sale for otherUserID whose customer_id equals customerID and assert it is excluded.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "tests-64"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 51,
+      "symbol": "stubStore.SummarizePendingFiadoSalesByCustomer",
+      "issue": "The stub discards both params (`_ db.SummarizePendingFiadoSalesByCustomerParams`) and the recorded listParams is only asserted for RowLimit/RowOffset (line 164), never for UserID/CustomerID. TestListPending_customerOfAnotherUserIs404 claims 'the query filters by user_id', but it only proves the stub's own GetCustomerByUserIDAndID returns pgx.ErrNoRows — the service could pass customerID as UserID (or a hardcoded 0) to the list and summary calls and every unit test here would still pass. Combined with the integration-test gap above, nothing verifies that the sales queries are scoped to the caller's user.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "tests-66"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "The payments aggregate is an uncorrelated subquery with no predicate at all (`SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id`). Postgres cannot push the outer `s.user_id`/`s.customer_id` qualifiers into a grouped, non-LATERAL subquery, so both queries scan and HashAggregate the entire multi-tenant payments table on every request just to price a handful of one customer's sales, then hash-join. The desktop original this was ported from runs on a single-tenant local SQLite file where that is harmless. Use a LATERAL/correlated `SELECT COALESCE(SUM(amount),0) FROM payments WHERE sale_id = s.id` (or join payments filtered to the candidate sales) so payments_sale_id_idx can be used.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "db-5"
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 45,
+      "symbol": "Common Commands / Testing And Verification",
+      "issue": "AGENTS.md documents `npm run typecheck` twice (line 45 and line 90) as the verification step for TypeScript changes, but the root script is `npm run typecheck --workspaces --if-present` and packages/desktop/package.json declares no `typecheck` script (only dev/build/preview/tauri/tauri:dev/tauri:build). The command therefore exits 0 without typechecking anything, so every agent that follows this file will report a passing verification that never ran. Either add `\"typecheck\": \"tsc --noEmit\"` to packages/desktop/package.json or point the doc at `npm run build:desktop`.",
+      "kind": "rule",
+      "severity": "med",
+      "from_candidate": null
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending",
+      "issue": "All three store failures are collapsed into `internalError()` — the originating error is neither wrapped with %w nor logged anywhere along the chain (handler writeFiadoFailure only reads the AppError). A pool exhaustion, a broken query or a context cancellation all surface as an identical 500 with zero diagnostics in the logs, unlike middleware.Bearer which logs before returning 500. Violates AGENTS.md 'Return errors from lower layers and log at process or handler boundaries' / 'Wrap inspectable errors with %w' and .cursor/rules/RULES.md. Note this mirrors the pre-existing internal/sync/initial.go pattern, so it is a repo-wide habit rather than a new invention.",
+      "kind": "rule",
+      "severity": "low",
+      "from_candidate": "repo_rules-48"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 27,
+      "symbol": "CustomerFiado / writeFiadoFailure",
+      "issue": "The endpoint's documented error contract (fiado.FailureResponse = {success,message,code}) does not hold for 401s. MountFiado always wraps the handler in apimw.Bearer, which makes the UNAUTHENTICATED branch here unreachable, while the 401s clients actually receive come from apperror.TokenNotProvided/InvalidToken/UserNotFound and are shaped {error,code} with no `success` field. TestCustomerFiado_requiresBearerToken only asserts rec.Code == 401 and never decodes the body, so the shape mismatch is invisible; a client decoding fiado.FailureResponse gets success=false with an empty message. Either assert the body shape or normalise the middleware response for this route.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-28"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 2,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "The header comment claims parity with SaleRepository::find_pending_credit_sales_by_customer, but the open-balance predicate differs. Desktop (sale_repository.rs:197) uses `(p.total_paid IS NULL OR p.total_paid < s.total)`, which keeps any unpaid sale regardless of total; the Go query uses `COALESCE(p.total_paid, 0) < s.total`, which drops an unpaid sale whose total is 0 (or negative, e.g. an adjustment). Same divergence in SummarizePendingFiadoSalesByCustomer, so such a sale is missing from both the list and the count. Either match the desktop predicate or drop the parity claim.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "behaviour-32"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 55,
+      "symbol": "Page.Offset / Page.TotalPages",
+      "issue": "Page is exported with exported fields and its invariants (1 <= Number <= MaxPage, 1 <= Limit <= MaxLimit) live only in NewPage, which the doc comment asks callers to use but nothing enforces. A directly constructed value — including the zero value `fiado.Page{}`, which is exactly what NewPage returns on its error paths — makes TotalPages panic with an integer divide-by-zero for any total > 0, and a large Number silently overflows the int32 conversion in Offset into a negative SQL OFFSET. Unexported fields with accessors, or a guard in the two methods, would make the invariant structural.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "contracts-13"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "issue": "The summary (total_sales / total_devido) is read in one statement and the page rows in another, with no transaction or snapshot between them. A payment that settles a sale between the two calls yields a response where pagination.total and total_devido count a sale that is absent from data, and the client can compute a page count that no longer exists. Low impact for a read-only endpoint, but if consistency matters, wrap both reads in a single repeatable-read transaction or derive the count from the same statement.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "db-29"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "productID",
+      "issue": "productID is seeded and then never used — no sale_items row is ever created from it, and nothing asserts on it. Dead setup that suggests a sale-items dimension the test was meant to cover but does not; either drop the insert or use it to seed sale_items so the fixtures resemble real sales.",
+      "kind": "bug",
+      "severity": "low",
+      "from_candidate": "tests-61"
+    }
+  ]
+}

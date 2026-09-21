@@ -1,0 +1,46 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "As queries de query/fiado.sql nunca foram geradas pelo sqlc: nao existe internal/db/fiado.sql.go e git status nao mostra nenhuma alteracao nos arquivos gerados. `go build ./...` falha com 'undefined: db.GetCustomerByUserIDAndIDParams', 'db.ListPendingFiadoSalesByCustomerParams', 'db.ListPendingFiadoSalesByCustomerRow', 'db.SummarizePendingFiadoSalesByCustomerParams' e 'db.SummarizePendingFiadoSalesByCustomerRow'. Todo o modulo (fiado, handler, cmd/server) e os testes novos nao compilam. Falta rodar `make -C packages/api-go sqlc` e versionar o resultado."
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 107,
+      "symbol": "TestPendingFiadoQueries",
+      "severity": "high",
+      "issue": "Consequencia direta do item acima: `go vet ./...` falha em internal/db_test com 'queries.GetCustomerByUserIDAndID undefined (type *db.Queries has no field or method GetCustomerByUserIDAndID)'. O pacote internal/db nao compila em modo de teste, ou seja, tambem quebra os testes de integracao ja existentes (sync_integration_test.go) que vivem no mesmo pacote db_test."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending / internalError",
+      "severity": "med",
+      "issue": "Os tres caminhos de erro de banco (linhas 42, 50 e 73) descartam o erro original: `return PendingResponse{}, internalError()` nao faz log nem wrap com %w. Um 500 nessa rota fica sem nenhum rastro da causa (timeout, conexao, erro de SQL) no log do servidor, contrariando a regra do AGENTS.md de 'return errors from lower layers and log at process or handler boundaries' e 'wrap inspectable errors with %w'. Outros servicos do repo (ex.: middleware/bearer.go:64) logam antes de responder."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "Falha de conversao ou NUMERIC nulo e convertido silenciosamente em 0. Se SummarizePendingFiadoSalesByCustomer devolver um numeric que nao converte, a API responde total_devido: 0 (cliente aparenta nao dever nada) em vez de sinalizar erro. Nao ha log nem propagacao do erro."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 102,
+      "symbol": "timestamptzTime",
+      "severity": "low",
+      "issue": "O segundo valor de retorno (bool de validade) e descartado no unico ponto de uso (`saleDate, _ := timestamptzTime(row.SaleDate)` na linha 77). O resultado e codigo morto: se sale_date fosse invalido, o JSON receberia a zero time (0001-01-01) sem distincao. A funcao poderia retornar apenas time.Time ou o chamador tratar o bool."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "Duplica exatamente internal/sync/pgconv.go:11 (mesma assinatura e mesmo corpo). Como o helper ja existe no repo, valeria extrair para um pacote compartilhado (ex.: internal/pgconv) em vez de manter duas copias que podem divergir."
+    }
+  ]
+}

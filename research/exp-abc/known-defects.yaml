@@ -255,3 +255,18 @@ defects:
       `n pgtype.Numeric`, `f`, `t pgtype.Timestamptz`. .cursor/rules/RULES.md:56
       proíbe nomes de uma letra e reserva t para *testing.T.
     match_any: ["uma letra", "single-letter", "single letter", "naming", "nomes de variáve", "nomes de variave", "rules.md"]
+
+# ---------------------------------------------------------------------------
+# NOTA SOBRE O JEV VERIFY (medido em b-1, b-2, b-3)
+#
+# Em 3 execuções o Jev rejeitou 2 achados. Os DOIS eram defeitos reais desta
+# lista, verificados por mim no código:
+#   b-1 rejeitou unauth-branch-unreachable
+#   b-2 rejeitou boundary-cases-untested
+# Nenhum falso positivo foi capturado em nenhuma das 3.
+#
+# Contraste com o teste de estresse anterior (alucinações plantadas), onde o
+# verificador rejeitou 7 de 8 falsos sem perder nenhum verdadeiro. A diferença
+# é que lá os falsos eram grosseiros; aqui não havia falso nenhum para pegar,
+# e o verificador ainda assim cortou dois verdadeiros.
+# ---------------------------------------------------------------------------

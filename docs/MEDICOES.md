@@ -231,3 +231,60 @@ A hipótese estava certa e o efeito é grande: **o custo do review não estava n
 análise, estava na orquestração**. Mover o protocolo para dentro do subagente
 resolveu mais da metade do problema com uma mudança de prompt — sem alterar
 Jev, verifier, gate ou qualquer lógica de análise.
+
+---
+
+# CORREÇÃO: o custo real do review inclui o subagente
+
+A medição anterior ("redução de 57%") contava **apenas a sessão principal**.
+O subagente tem transcript próprio (`<sessão>/subagents/*.jsonl`) e não
+aparece ali. Números completos:
+
+| protocolo | sessão principal | subagente | **TOTAL** |
+| --- | --- | --- | --- |
+| orquestrado | 1.229.260 | 1.954.287 | **3.183.547** |
+| uma ida e volta | 529.394 | 1.812.402 | **2.341.796** |
+
+**A redução real foi de 26%, não 57%.** O Experimento 2 moveu custo da sessão
+principal para o subagente; o total caiu bem menos do que parecia.
+
+E o mais importante: **o subagente é hoje 77% do custo do review**.
+
+## Onde o subagente gasta
+
+24 turnos, e a anatomia é extrema:
+
+| | |
+| --- | --- |
+| cache_read | 1.700.608 (**99,9%**) |
+| output total | 1.583 tokens |
+| ferramentas | Read×1, Bash×4 |
+| turnos sem ferramenta | 19 de 24 |
+| cache_read médio/turno | 70.858 |
+
+**19 dos 24 turnos produzem entre 3 e 8 tokens de saída** — turnos quase
+vazios, cada um re-lendo os ~71k de contexto acumulado.
+
+## A causa provável: o próprio prompt
+
+O prompt do subagente pede **5 passos sequenciais** ("Passo 1 — correção",
+"Passo 2 — testes", "Passo 3 — consolidar"...). Isso convida o modelo a gastar
+um turno por passo, mais os turnos de raciocínio entre eles.
+
+É a MESMA lição do Experimento 2, um nível abaixo: *pedir orquestração produz
+orquestração*. A formula não mudou:
+
+```
+custo ≈ turnos × contexto_acumulado
+```
+
+## Leverage comparado
+
+Partindo de 24 turnos × 71k:
+
+| intervenção | efeito | custo projetado | redução |
+| --- | --- | --- | --- |
+| reduzir turnos (24 → 5) via prompt | ataca os turnos | ~355.000 | **−79%** |
+| Jev Scout cortando 40% do contexto | ataca o contexto | ~1.020.000 | −41% |
+
+**Reduzir turnos tem quase o dobro de alavancagem e é uma mudança de prompt.**

@@ -17,6 +17,12 @@ from pathlib import Path
 import yaml
 
 HERE = Path(__file__).resolve().parent
+# O known defect set é COMPARTILHADO entre experimentos: os defeitos são do
+# snapshot, não do experimento. `JEV_RUNS` aponta para as execuções a pontuar,
+# então o exp-d reaproveita este scorer sem copiar a lógica.
+import os
+
+RUNS_DIR = Path(os.environ.get("JEV_RUNS", HERE / "runs")).resolve()
 KNOWN = yaml.safe_load((HERE / "known-defects.yaml").read_text())
 DEFECTS = KNOWN["defects"]
 
@@ -214,7 +220,7 @@ def report(run: Path):
 
 
 def matrix():
-    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    runs = sorted(p for p in RUNS_DIR.iterdir() if p.is_dir())
     scored = [s for s in (score(r) for r in runs) if s]
     if not scored:
         print("nenhuma execução pontuada ainda")
@@ -250,7 +256,7 @@ def summary():
     Com n=2-3 a faixa importa mais que a média: se o pior do braço melhor
     empata com o melhor do braço pior, a diferença não é conclusiva.
     """
-    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    runs = sorted(p for p in RUNS_DIR.iterdir() if p.is_dir())
     data = {}
     for r in runs:
         s = score(r)
@@ -298,7 +304,7 @@ def saturation():
     review já cobre o espaço e diversidade não compra nada. Se não achata, o
     conjunto conhecido é um piso e todo recall medido contra ele é otimista.
     """
-    runs = [p for p in (HERE / "runs").iterdir() if p.is_dir() and (p / "result.json").exists()]
+    runs = [p for p in RUNS_DIR.iterdir() if p.is_dir() and (p / "result.json").exists()]
     runs.sort(key=lambda p: (p / "result.json").stat().st_mtime)
     seen, rows = set(), []
     for r in runs:
@@ -336,7 +342,7 @@ def diversity():
     """
     from itertools import combinations
 
-    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    runs = sorted(p for p in RUNS_DIR.iterdir() if p.is_dir())
     scored = [s for s in (score(r) for r in runs) if s]
     arms = sorted({s["arm"] for s in scored})
     print(f"\n{'braço':8}{'k':>3}{'recall união':>16}{'marginal':>12}")
@@ -359,7 +365,7 @@ def diversity():
     linhas = []
     for a in arms:
         rs = [s for s in scored if s["arm"] == a]
-        toks = [usage(HERE / "runs" / s["run"]).get("tokens", 0) for s in rs]
+        toks = [usage(RUNS_DIR / s["run"]).get("tokens", 0) for s in rs]
         medio = sum(toks) / len(toks)
         for k in range(1, len(rs) + 1):
             vals = [len(set().union(*(set(s["found_known"]) for s in combo))) / KNOWN["known_total"]
@@ -402,7 +408,7 @@ def verify_effect():
       - falso positivo rejeitado  -> ganho de precisão
       - defeito CONHECIDO rejeitado -> falsa rejeição, o dano que preocupa
     """
-    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    runs = sorted(p for p in RUNS_DIR.iterdir() if p.is_dir())
     rows = []
     for run in runs:
         vf = run / "jev-dir" / "findings-verified.json"
@@ -458,4 +464,4 @@ if __name__ == "__main__":
         summary()
     else:
         for a in args:
-            report(Path(a) if Path(a).is_absolute() else HERE / a)
+            report(Path(a) if Path(a).is_absolute() else Path(a))

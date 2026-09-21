@@ -116,7 +116,10 @@ const cmdReview = () => {
   }
   let prep;
   try {
-    prep = prepare(root, config, {});
+    // `jevCommand` é obrigatório aqui: sem ele o protocolo do subagente manda
+    // rodar `jev verify`, e numa instalação local sem npm link esse comando
+    // não existe. O subagente então gasta turnos tentando achá-lo.
+    prep = prepare(root, config, { jevCommand: cmd });
   } catch (e) {
     console.log(`Não consegui preparar o review (${String(e.message ?? e).slice(0, 120)}). Siga sem review.`);
     markReviewed(process.env.CLAUDE_CODE_SESSION_ID);

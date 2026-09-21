@@ -55,34 +55,32 @@ const jevCommand = () => {
   return `node ${path.resolve(here, "../../src/cli.mjs")}`;
 };
 
+/**
+ * Instrução MÍNIMA: uma ida e uma volta.
+ *
+ * Medido: 98,3% do custo do review era contexto re-cobrado a cada turno de
+ * orquestração do agente principal (9 turnos × 134k). O trabalho de análise
+ * em si custava 5.944 tokens. Por isso o protocolo inteiro foi movido para
+ * DENTRO do subagente — onde o contexto é fresco e barato — e a sessão
+ * principal faz apenas: chamar (1 turno) e apresentar (1 turno).
+ */
 const instruction = (prep) => {
-  const passes = prep.passes.join(" e ");
-  const jev = jevCommand();
+  const promptRel = path.relative(process.cwd(), prep.prompt_file);
   return `Review automático do jev-enhancer.
 
-O contexto já está preparado em \`${path.relative(process.cwd(), prep.context_file)}\`
-(diff, invariantes do repositório${prep.deterministic_findings ? `, e ${prep.deterministic_findings} achado(s) determinístico(s) já verificados por ferramenta` : ""}).
+Lance **UM ÚNICO subagente** com contexto limpo e passe a ele, como prompt, o
+conteúdo de \`${promptRel}\`. Esse arquivo contém o protocolo completo (as duas
+análises, a consolidação e a triagem) — o subagente executa tudo sozinho e
+devolve um JSON compacto.
 
-Faça agora, antes de encerrar:
+Quando ele responder: **apresente os achados ao usuário** no seu resumo final,
+ordenados por severidade.
 
-1. Rode ${prep.passes.length} análises INDEPENDENTES, cada uma em um SUBAGENTE com contexto
-   limpo (não reaproveite o contexto desta sessão — ele é grande e caro):
-   - **correctness**: defeitos funcionais/lógicos introduzidos pelo diff — estado
-     inconsistente, caminhos de falha não tratados, corridas, donos duplicados de
-     um mesmo estado, recursos não liberados, violações dos invariantes do repo.
-   - **tests**: comportamento introduzido ou alterado sem cobertura adequada,
-     caminhos infelizes não exercitados, testes que asseguram menos do que aparentam.
-   Cada subagente lê o arquivo de contexto e responde SOMENTE com:
-   {"findings":[{"file":"...","symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
-
-2. Junte os achados dos ${passes}, remova duplicatas, grave em \`.jev/findings.json\`
-   no formato {"findings":[...]} e rode: \`${jev} verify .jev/findings.json\`
-
-3. APRESENTE o resultado ao usuário no seu resumo final, ordenado por severidade.
-
-NÃO corrija nada agora. Este review é somente leitura — a decisão do que mudar é
-do usuário. Se algum achado for claramente um falso positivo, diga isso em vez de
-silenciá-lo.`;
+Duas regras:
+- NÃO orquestre etapa por etapa nesta sessão. Cada turno seu aqui re-lê todo o
+  contexto acumulado e custa caro; o subagente faz o trabalho barato.
+- NÃO corrija nada. Este review é somente leitura — quem decide o que mudar é o
+  usuário. Se algum achado parecer falso positivo, diga isso em vez de omiti-lo.`;
 };
 
 const main = async () => {
@@ -115,7 +113,7 @@ const main = async () => {
   // 3. cost gate + preparação
   let prep;
   try {
-    prep = prepare(root, config);
+    prep = prepare(root, config, { jevCommand: jevCommand() });
   } catch (e) {
     trace(root, "prepare", { error: String(e.message ?? e).slice(0, 200) });
     record(root, { status: "failed", error: String(e.message ?? e).slice(0, 300), session: input.session_id });

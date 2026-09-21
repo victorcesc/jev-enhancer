@@ -81,6 +81,50 @@ const renderContext = (diff, rules, detFindings) => {
   return parts.join("\n");
 };
 
+/** Protocolo completo, executado DENTRO do subagente (contexto fresco). */
+const subagentPrompt = (contextFile, config, detCount) => {
+  const passes = config?.review?.passes ?? ["correctness", "tests"];
+  const rel = path.basename(contextFile);
+  return `Você é um revisor de código sênior. Execute o protocolo abaixo INTEIRO e
+devolva APENAS o JSON final — sem preâmbulo, sem raciocínio, sem relatório.
+
+Leia o contexto: \`.jev/${rel}\` (diff da mudança, invariantes do repositório${
+    detCount ? `, e ${detCount} achado(s) já verificados por ferramenta determinística` : ""
+  }).
+
+## Passo 1 — análise de CORREÇÃO
+Defeitos funcionais/lógicos introduzidos pelo diff: estado inconsistente,
+caminhos de falha não tratados, corridas, donos duplicados de um mesmo estado,
+recursos não liberados, violações dos invariantes do repositório. Priorize o
+que quebra em produção e que os testes não pegariam.
+
+## Passo 2 — análise de TESTES
+Comportamento introduzido ou alterado sem cobertura; caminhos infelizes não
+exercitados; testes que asseguram menos do que aparentam (campos declarados e
+nunca comparados, asserções ausentes).
+
+Faça as duas análises de forma independente antes de juntar — não deixe a
+primeira contaminar a segunda.
+
+## Passo 3 — consolidar
+Junte os achados dos ${passes.length} passos, remova duplicatas e grave em
+\`.jev/findings.json\`:
+{"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
+
+## Passo 4 — triagem
+Rode: \`JEV_VERIFY_CMD\`
+Isso grava \`.jev/findings-verified.json\` com o veredito do Jev por achado.
+
+## Passo 5 — resposta
+Responda SOMENTE com o JSON compacto abaixo, lendo de findings-verified.json.
+Inclua no máximo 10 achados, ordenados por severidade. Campo \`summary\` com no
+máximo 140 caracteres. NÃO inclua o raciocínio nem o relatório completo — eles
+ficam nos arquivos.
+
+{"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"rejected":0},
+ "findings":[{"file":"...","line":0,"severity":"high","summary":"..."}]}`;
+};
+
 export const prepare = (root, config, opts = {}) => {
   const base = opts.base ?? defaultBase(root);
   // ignore_paths vale também para os arquivos novos: sem isso, .jev/ e .claude/
@@ -102,12 +146,27 @@ export const prepare = (root, config, opts = {}) => {
   const contextFile = path.join(dir, "review-context.md");
   writeFileSync(contextFile, context);
 
+  // O protocolo inteiro vai para um arquivo que o SUBAGENTE lê. Assim a
+  // mensagem injetada na sessão principal fica mínima e, principalmente, o
+  // agente principal gasta 2 turnos (chamar + receber) em vez de orquestrar
+  // etapa por etapa — 98% do custo do review era contexto re-cobrado a cada
+  // turno de orquestração.
+  const promptFile = path.join(dir, "review-prompt.md");
+  writeFileSync(
+    promptFile,
+    subagentPrompt(contextFile, config, det.findings.length).replace(
+      "JEV_VERIFY_CMD",
+      `${opts.jevCommand ?? "jev"} verify .jev/findings.json`,
+    ),
+  );
+
   return {
     gate: "passed",
     reason: gate.reason,
     stats: gate.stats,
     base: base ?? null,
     context_file: contextFile,
+    prompt_file: promptFile,
     rules: rules.map((r) => r.name),
     deterministic_findings: det.findings.length,
     deterministic_errors: det.errors,

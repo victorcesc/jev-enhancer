@@ -173,3 +173,61 @@ Os números publicados antes estavam inflados ~2× pela dupla contagem:
 
 A proporção se manteve (o erro afetava os dois lados igualmente), mas os
 absolutos não. O `inspect` agora deduplica por id de mensagem.
+
+---
+
+# Experimento 2 — tool como happy path (uma ida e volta)
+
+## A mudança
+
+O protocolo inteiro (duas análises + consolidação + triagem) saiu da sessão
+principal e foi para `.jev/review-prompt.md`, lido pelo SUBAGENTE. A sessão
+principal passou a fazer só: chamar (1 turno) e apresentar (1 turno).
+
+A instrução injetada caiu de 1.370 para **737 caracteres**.
+
+## Resultado medido
+
+| | protocolo orquestrado | uma ida e volta |
+| --- | --- | --- |
+| turnos no review | 9 | **4** |
+| tokens do review | 1.229.260 | **529.394** |
+| % da implementação | 21,6% | **6,9%** |
+| ferramentas na sessão principal | Agent, Bash, Bash | **Agent** |
+
+**Redução de 57%** no custo do review, sem tocar no Jev nem na análise.
+
+A prova de que o desenho funcionou está nas ferramentas: a sessão principal
+agora faz **uma única chamada `Agent`**. O `jev verify` sumiu do transcript
+principal porque passou a rodar dentro do subagente — onde é barato.
+
+## Qualidade preservada (ou melhor)
+
+9 achados: **7 confirmados, 2 needs_context, 0 rejeitados**.
+
+E pegou o defeito de maior severidade (s=2,99): *"a nova rota é montada em
+/api/v1/customers, prefixo que não está em middleware..."* — a classe de bug
+que o baseline explorando livre só encontra em 2 de 6 corridas. Marcado como
+`needs_context` (evidência 0,34) porque o conteúdo da config não está no diff,
+exatamente como esperado.
+
+Também achou: todos os testes HTTP montarem `chi.NewRouter()` cru sem o
+middleware (por isso o bug do prefixo passa nos testes), `numericFloat`
+engolindo erro, três caminhos de falha descartando o erro original, e dois
+donos da regra de paginação.
+
+## Por que 4 turnos e não 2
+
+O piso teórico é 2 (chamar + receber). Os 2 turnos extras são texto puro, sem
+ferramenta — o agente compondo antes e depois da chamada. Espremer isso daria
+mais ~130 k por turno economizado, mas exige controlar a verbosidade do agente,
+que é menos determinístico que mover trabalho para o subagente.
+
+Custo projetado se chegar a 2 turnos: ~259 k (−79% do original).
+
+## Conclusão
+
+A hipótese estava certa e o efeito é grande: **o custo do review não estava na
+análise, estava na orquestração**. Mover o protocolo para dentro do subagente
+resolveu mais da metade do problema com uma mudança de prompt — sem alterar
+Jev, verifier, gate ou qualquer lógica de análise.

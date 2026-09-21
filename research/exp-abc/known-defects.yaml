@@ -12,6 +12,8 @@
 #        namespace inteiro, regras de SQL só cobertas por teste que pula sem
 #        Postgres, e ramo 401 inalcançável
 #   +1 — a-2: colunas de customers buscadas e descartadas
+#   +2 — b-2: caminhos de erro de auth sem cobertura na rota, e casos de
+#        borda (pagamento em excesso, customer_id nulo) nunca exercitados
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -22,7 +24,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 18
+known_total: 20
 
 defects:
   - id: sqlc-not-generated
@@ -33,7 +35,10 @@ defects:
       As três queries novas nunca passaram por `sqlc generate`: não existe
       internal/db/fiado.sql.go e querier.go não tem os métodos. O pacote não
       compila.
-    match_any: ["sqlc", "fiado.sql.go", "undefined: db.", "não compila", "nao compila", "go build"]
+    # "sqlc" sozinho casava com `sqlc.arg(customer_id)`, que aparece em
+    # achados sobre a query e nada tem a ver com a geração não ter rodado.
+    match_any: ["sqlc generate", "sqlc nao foi regenerado", "sqlc não foi regenerado",
+                "fiado.sql.go", "undefined: db.", "não compila", "nao compila", "go build"]
 
   - id: payments-subquery-unfiltered
     severity: med
@@ -193,6 +198,31 @@ defects:
       importa, para decidir o 404. Um SELECT 1 / EXISTS diria a intenção e
       evitaria a transferência. Verificado em fiado.sql:5-11 e pending.go:35.
     match_any: ["descarta o resultado", "select 1", "colunas de customers", "10 colunas", "so usa o erro", "só usa o erro"]
+
+  - id: auth-error-paths-untested
+    severity: low
+    file: packages/api-go/internal/handler/fiado_router_test.go
+    title: "só o token ausente é testado na rota fiado"
+    detail: >
+      TestCustomerFiado_requiresBearerToken cobre apenas token ausente. Token
+      malformado, expirado e usuário inexistente (apperror.InvalidToken /
+      UserNotFound no middleware Bearer) não têm cobertura, apesar de serem os
+      caminhos infelizes reais da nova rota. Verificado: zero menções a
+      InvalidToken/UserNotFound no arquivo.
+    match_any: ["requiresbearertoken", "token malformado", "expirado", "invalidtoken",
+                "usernotfound", "usuario inexistente", "usuário inexistente"]
+
+  - id: boundary-cases-untested
+    severity: low
+    file: packages/api-go/internal/db/fiado_integration_test.go
+    title: "pagamento em excesso e customer_id nulo nunca exercitados"
+    detail: >
+      Sem caso de SUM(amount) > total nem de venda com customer_id NULL, o
+      filtro COALESCE(p.total_paid,0) < s.total e o cast
+      sqlc.arg(customer_id)::INT nunca são testados nos limites. O teste
+      também semeia um produto que nenhuma asserção usa.
+    match_any: ["pagamento em excesso", "sum(amount) > total", "customer_id null",
+                "nos limites", "nesses limites", "nenhuma assercao usa", "nenhuma asserção usa"]
 
   - id: single-letter-params
     severity: low

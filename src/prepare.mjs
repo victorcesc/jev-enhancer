@@ -128,7 +128,7 @@ AÇÃO 3 — Responda SOMENTE o JSON abaixo, preenchido com a saída da triagem.
 Máximo ${maxFindings} achados, ordenados por severidade; \`summary\` até 140 caracteres.
 Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
 
-{"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"rejected":0},
+{"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"contradicted":0},
  "findings":[{"file":"...","line":0,"severity":"high","summary":"..."}]}`;
 };
 

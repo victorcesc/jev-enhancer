@@ -7,10 +7,14 @@
 // O Jev fica FORA do loop da LLM: a triagem não entra no contexto do agente,
 // então não é re-cobrada a cada turno.
 //
-// Regra crítica, validada em teste de estresse (9 achados reais + 8
-// alucinações plausíveis): evidência insuficiente NUNCA é tratada como achado
-// falso. Foi ela que impediu o descarte do defeito mais grave, que o Jev não
-// conseguia confirmar só com o diff.
+// POLÍTICA CONSERVADORA (desde o experimento A/B/C): o Jev não apaga achado.
+// Ele classifica. O único veredito que remove é `contradicted`, e ele exige
+// que o retrieval tenha LIDO do disco um arquivo que desminta a premissa.
+//
+// O motivo é medido, não teórico: em 3 execuções de campo a política antiga
+// rejeitou 2 achados e os DOIS eram defeitos reais; nenhum falso positivo foi
+// capturado, porque nenhum dos 9 reviews alucinou. Ausência de evidência
+// nunca é evidência de ausência.
 //
 // Sem chave, cai para o modo `mock` em vez de falhar — princípio do fail-open:
 // a ausência de uma dependência externa não pode travar o fluxo do agente.
@@ -44,19 +48,28 @@ const SEVERITY_LEVELS = [
   "alta: quebra a funcionalidade ou vaza dados em produção",
 ];
 
-// Limiares. `validFloor` veio do teste de estresse: abaixo dele o Jev está
-// CONFIANTE de que o achado é falso, e aí evidência baixa não deve salvá-lo —
-// uma alucinação ("loop de retry com off-by-one", código inexistente) recebia
-// valid=0.02 com evidence=0.23 e escapava como needs_context.
+// Limiares.
+//
+// `VALID_FLOOR` foi REMOVIDO da política. Ele vinha do teste de estresse, onde
+// alucinações plantadas recebiam valid≈0.02 e precisavam ser cortadas. Em
+// campo o cenário não se materializou: nas 9 execuções do experimento A/B/C
+// nenhum review alucinou, e o Jev rejeitou 2 achados — os DOIS eram defeitos
+// reais verificados no código. Precisão ganha: zero. Defeitos destruídos: 2.
+//
+// Política nova: o Jev nunca apaga um achado por julgamento probabilístico.
+// Só `contradicted` remove, e exige EVIDÊNCIA POSITIVA do disco (ver
+// resolveNeedsContext) — não a mera ausência dela.
 const VALID_MIN = 0.5;
 const EVIDENCE_MIN = 0.4;
-const VALID_FLOOR = 0.15;
+// Alto de propósito: remover um achado é a ação destrutiva deste sistema.
+const CONTRADICTION_MIN = 0.7;
 
 const mockVerify = (findings) => {
   const out = findings.map((f) => ({
     ...f,
     jev: { valid: null, severity_score: SEVERITY_RANK[(f.severity ?? "low").toLowerCase()] ?? 1, evidence_sufficient: null },
-    verdict: "confirmed",
+    verdict: "needs_context",
+    reason: "sem chave do Jev: nenhuma triagem foi feita",
   }));
   out.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
   return { findings: out, mode: "mock", usage: {} };
@@ -64,9 +77,11 @@ const mockVerify = (findings) => {
 
 /**
  * Contrato de saída (idêntico entre mock e real):
- *   { findings: [{ ...original, jev: {valid, severity_score, evidence_sufficient}, verdict }],
+ *   { findings: [{ ...original, jev: {valid, severity_score, evidence_sufficient},
+ *                  verdict, reason }],
  *     mode: "mock" | "jev", usage }
- * verdict ∈ confirmed | needs_context | rejected
+ * verdict ∈ confirmed | needs_context | contradicted
+ * `reason` é sempre preenchido: veredito sem motivo registrado não é auditável.
  */
 /**
  * Segunda passada determinística para os `needs_context`.
@@ -99,6 +114,18 @@ const resolveNeedsContext = async (key, verified, findings, diff, root) => {
       type: "noul",
       instructions: `Agora o contexto em state é suficiente para julgar state.findings.${id} com segurança?`,
     };
+    // A pergunta que autoriza remoção. Deliberadamente não é "você duvida?":
+    // é "o código que eu li DIZ O CONTRÁRIO?". Duvidar não apaga achado;
+    // só evidência positiva apaga.
+    questions[`${id}_contra`] = {
+      type: "noul",
+      instructions:
+        `O conteúdo dos arquivos em state.evidence CONTRADIZ DIRETAMENTE a premissa ` +
+        `do achado state.findings.${id}? Responda verdadeiro apenas se o código lido ` +
+        `mostrar que a premissa é factualmente falsa (ex.: o achado diz que algo não ` +
+        `existe e o arquivo mostra que existe). Responda falso se você apenas duvida, ` +
+        `se o arquivo não trata do assunto, ou se a evidência é inconclusiva.`,
+    };
   });
 
   let json;
@@ -116,17 +143,32 @@ const resolveNeedsContext = async (key, verified, findings, diff, root) => {
   }
 
   const out = [...verified];
-  for (const { i } of pending) {
+  for (const { f, i } of pending) {
     const id = `f${i}`;
     const valid = json.answers?.[`${id}_valid`]?.noul ?? 0;
     const evid = json.answers?.[`${id}_ev`]?.noul ?? 0;
-    if (evid < EVIDENCE_MIN) continue; // segue needs_context, agora com razão
-    out[i] = {
-      ...out[i],
-      jev: { ...out[i].jev, valid: Number(valid.toFixed(2)), evidence_sufficient: Number(evid.toFixed(2)) },
-      verdict: valid >= VALID_MIN ? "confirmed" : "rejected",
-      resolved_by: "retrieval",
-    };
+    const contra = json.answers?.[`${id}_contra`]?.noul ?? 0;
+
+    // Os arquivos que ESTE achado citava e que de fato foram lidos do disco.
+    // Sem isso, `contradicted` viraria "não achei o arquivo, logo é falso" —
+    // exatamente a falsa rejeição que já nos custou um defeito real antes.
+    const lidos = missingEvidence(f, diff).filter((n) => n in evidence);
+    const base = { ...out[i], jev: { ...out[i].jev, valid: Number(valid.toFixed(2)), evidence_sufficient: Number(evid.toFixed(2)) } };
+
+    if (lidos.length === 0) {
+      out[i] = { ...base, verdict: "needs_context", reason: "caminho citado não foi encontrado no repositório" };
+    } else if (contra >= CONTRADICTION_MIN) {
+      out[i] = {
+        ...base,
+        verdict: "contradicted",
+        reason: `${lidos.join(", ")} contradiz a premissa (contra=${contra.toFixed(2)})`,
+        resolved_by: "retrieval",
+      };
+    } else if (evid >= EVIDENCE_MIN && valid >= VALID_MIN) {
+      out[i] = { ...base, verdict: "confirmed", reason: `confirmado após ler ${lidos.join(", ")}`, resolved_by: "retrieval" };
+    } else {
+      out[i] = { ...base, verdict: "needs_context", reason: `li ${lidos.join(", ")} e continua inconclusivo` };
+    }
   }
   return { verified: out, usage: json.usage ?? {}, retrieved: names };
 };
@@ -154,6 +196,18 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
       type: "noul",
       instructions: `O que está em state É SUFICIENTE para julgar o achado state.findings.${id} com segurança? Responda falso se para decidir seria necessário ver código que não está aqui.`,
     };
+    // O diff também é evidência positiva. Sem esta pergunta, um achado cuja
+    // premissa o PRÓPRIO diff desmente nunca poderia ser removido — a segunda
+    // passada só busca arquivos de FORA do diff, então nunca rodaria.
+    questions[`${id}_contra`] = {
+      type: "noul",
+      instructions:
+        `O código em state.diff CONTRADIZ DIRETAMENTE a premissa do achado ` +
+        `state.findings.${id}? Responda verdadeiro apenas se o diff mostrar que a ` +
+        `premissa é factualmente falsa — o achado afirma que algo não existe e o diff ` +
+        `mostra que existe, ou descreve um trecho de código que não está lá. Responda ` +
+        `falso se você apenas duvida, ou se o diff não basta para desmentir.`,
+    };
   });
 
   let json;
@@ -175,13 +229,24 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
     const valid = json.answers?.[`${id}_valid`]?.noul ?? 0;
     const evidence = json.answers?.[`${id}_ev`]?.noul ?? 0;
     const sev = json.answers?.[`${id}_sev`]?.score ?? 0;
-    // ordem importa: confiantemente falso → rejeita; evidência fraca →
-    // needs_context (nunca descarta o possivelmente real); senão, validade.
-    let verdict;
-    if (valid < VALID_FLOOR) verdict = "rejected";
-    else if (evidence < EVIDENCE_MIN) verdict = "needs_context";
-    else if (valid >= VALID_MIN) verdict = "confirmed";
-    else verdict = "rejected";
+    const contra = json.answers?.[`${id}_contra`]?.noul ?? 0;
+    // A ÚNICA saída que remove é `contradicted`, e ela exige que o diff
+    // desminta a premissa — não que o Jev duvide dela. Duvidar vira
+    // `needs_context`, que continua visível para o humano.
+    let verdict, reason;
+    if (contra >= CONTRADICTION_MIN) {
+      verdict = "contradicted";
+      reason = `o diff desmente a premissa (contra=${contra.toFixed(2)}, valid=${valid.toFixed(2)})`;
+    } else if (evidence < EVIDENCE_MIN) {
+      verdict = "needs_context";
+      reason = "evidência insuficiente no diff para julgar";
+    } else if (valid >= VALID_MIN) {
+      verdict = "confirmed";
+      reason = `Jev confirma (valid=${valid.toFixed(2)})`;
+    } else {
+      verdict = "needs_context";
+      reason = `Jev duvida (valid=${valid.toFixed(2)}) mas nada no código contradiz`;
+    }
     return {
       ...f,
       jev: {
@@ -190,6 +255,7 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
         evidence_sufficient: Number(evidence.toFixed(2)),
       },
       verdict,
+      reason,
     };
   });
   // Exp. 5 — resolve os needs_context com busca determinística, sem LLM.
@@ -208,5 +274,12 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
   };
 };
 
-/** Achados que o usuário deve ver: confirmados + os que pedem mais contexto. */
-export const keep = (verified) => verified.filter((f) => f.verdict !== "rejected");
+/**
+ * Achados que o usuário deve ver.
+ *
+ * Só `contradicted` é removido — e esse veredito exige que o retrieval tenha
+ * LIDO um arquivo do disco que desminta a premissa. Dúvida probabilística do
+ * Jev vira `needs_context` e continua visível: quem decide descartar é o
+ * humano, não um limiar.
+ */
+export const keep = (verified) => verified.filter((f) => f.verdict !== "contradicted");

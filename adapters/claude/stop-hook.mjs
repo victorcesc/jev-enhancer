@@ -10,6 +10,7 @@
 //   session guard → cost gate → bloqueia UMA vez com instrução → agente
 //   roda os passes em SUBAGENTE → apresenta → para de novo → guard silencia.
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { loadConfig, findRepoRoot } from "../../src/config.mjs";
 import { gitRoot } from "../../src/gate.mjs";
 import { prepare } from "../../src/prepare.mjs";
@@ -42,8 +43,21 @@ const readStdin = () =>
     });
   });
 
+/**
+ * Como o agente deve invocar o CLI. Se `jev` não estiver no PATH (instalação
+ * local, sem npm link), emitimos o caminho absoluto — senão a instrução manda
+ * rodar um comando que não existe e o protocolo quebra no passo do verify.
+ */
+const jevCommand = () => {
+  const onPath = spawnSync("sh", ["-c", "command -v jev"], { encoding: "utf8", timeout: 5000 });
+  if (onPath.status === 0 && (onPath.stdout ?? "").trim()) return "jev";
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  return `node ${path.resolve(here, "../../src/cli.mjs")}`;
+};
+
 const instruction = (prep) => {
   const passes = prep.passes.join(" e ");
+  const jev = jevCommand();
   return `Review automático do jev-enhancer.
 
 O contexto já está preparado em \`${path.relative(process.cwd(), prep.context_file)}\`
@@ -62,7 +76,7 @@ Faça agora, antes de encerrar:
    {"findings":[{"file":"...","symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
 
 2. Junte os achados dos ${passes}, remova duplicatas, grave em \`.jev/findings.json\`
-   no formato {"findings":[...]} e rode: \`jev verify .jev/findings.json\`
+   no formato {"findings":[...]} e rode: \`${jev} verify .jev/findings.json\`
 
 3. APRESENTE o resultado ao usuário no seu resumo final, ordenado por severidade.
 

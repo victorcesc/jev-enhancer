@@ -70,8 +70,14 @@ const analyzeTranscript = (file) => {
       if (c?.type !== "tool_use") continue;
       const name = c.name ?? "?";
       out[bucketTools][name] = (out[bucketTools][name] ?? 0) + 1;
-      if (name === "Task") out.subagents += 1;
-      if (name === "Bash" && /jev\s+verify/.test(JSON.stringify(c.input ?? {}))) out.jev_verify_calls += 1;
+      // O nome da ferramenta de subagente varia entre versões do harness
+      // (Task/Agent). Medir o nome errado faz o relatório acusar "0 subagentes"
+      // quando eles foram usados — foi o que aconteceu no primeiro teste real.
+      if (name === "Task" || name === "Agent") out.subagents += 1;
+      // O verify pode ser invocado como `jev verify` (instalado) ou
+      // `node .../cli.mjs verify` (instalação local, sem PATH).
+      if (name === "Bash" && /(jev|cli\.mjs)\s+verify/.test(JSON.stringify(c.input ?? {})))
+        out.jev_verify_calls += 1;
     }
   });
   return out;

@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { collectDiff, defaultBase, evaluateGate } from "./gate.mjs";
+import { gerarDecisoes } from "./decisions.mjs";
 
 const MAX_DIFF_CHARS = 120_000;
 
@@ -145,6 +146,75 @@ Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
  "findings":[{"file":"...","line":0,"severity":"high","summary":"..."}]}`;
 };
 
+
+/**
+ * Mapa de decisão para o worker — candidatos como PISTAS.
+ *
+ * A redação importa e foi discutida: se o mapa for apresentado como escopo, a
+ * cobertura do review passa a ser a cobertura do gerador (hoje 18/27), e o
+ * experimento mede a limitação do gerador em vez da hipótese. Por isso o texto
+ * insiste em "não é limite" e o schema tem `from_candidate: null` para achado
+ * descoberto fora do mapa.
+ */
+const renderMapa = (candidatos) => {
+  const porTipo = {};
+  for (const c of candidatos) (porTipo[c.kind] ??= []).push(c);
+  const partes = [
+    "# Mapa de investigação (gerado por análise estrutural, sem LLM)",
+    "",
+    `${candidatos.length} pontos do diff onde a análise estrutural encontrou sinal.`,
+    "",
+    "**Isto é uma lista de PISTAS, não o escopo do review.** Cada item é um",
+    "lugar que vale olhar — pode ser defeito real ou não ser nada. Defeito que",
+    "não está aqui conta igual, e o mapa não cobre tudo por construção.",
+    "",
+  ];
+  for (const [kind, cs] of Object.entries(porTipo)) {
+    partes.push(`## ${kind} (${cs.length})`, "");
+    for (const c of cs) {
+      partes.push(`- **\`${c.id}\`** — ${c.question}`);
+      partes.push(`  - local: \`${c.file}${c.line ? ":" + c.line : ""}\``);
+      for (const e of c.evidence) partes.push(`  - ${e}`);
+    }
+    partes.push("");
+  }
+  return partes.join("\n");
+};
+
+/** Protocolo do worker no braço F1: mapa + liberdade de investigar fora. */
+const promptF1 = (rel, maxFindings) => `Revisor de código sênior. Três ações, sem narrar o que vai fazer.
+
+AÇÃO 1 — Leia \`.jev/${rel}\` (diff e invariantes) e \`.jev/decision-map.md\`
+(pistas priorizadas por análise estrutural).
+
+AÇÃO 2 — INVESTIGUE o código de verdade, em duas frentes:
+
+• os candidatos do mapa: confirme ou descarte cada um lendo o código. Um
+  candidato é uma pista, não um veredito — muitos não serão defeito.
+• o que o mapa NÃO cobre: ele é incompleto por construção e ignora classes
+  inteiras de problema. Defeito que você achar por conta própria vale igual.
+  Não se limite à lista.
+
+Siga cada símbolo citado até a definição, rode o build e os testes quando isso
+decidir alguma coisa. Achado que você não confirmou lendo o código não vale.
+
+Cubra DOIS eixos: correção (defeitos funcionais/lógicos, caminhos de falha não
+tratados, violações dos invariantes do repositório) e testes (comportamento
+sem cobertura, testes que asseguram menos do que aparentam).
+
+AÇÃO 3 — Grave os achados em \`.jev/findings.json\` com a ferramenta Write:
+
+  {"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low","from_candidate":"db-1"}]}
+
+\`from_candidate\` é o id do candidato que levou ao achado, ou \`null\` se você
+o descobriu por conta própria. Esse campo é medição: preencha com honestidade.
+
+Não termine sem gravar. A triagem roda sozinha depois.
+
+Depois responda SOMENTE:
+{"status":"reviewed","counts":{"total":0,"from_map":0,"independent":0}}
+Máximo ${maxFindings} achados.`;
+
 export const prepare = (root, config, opts = {}) => {
   const base = opts.base ?? defaultBase(root);
   // ignore_paths vale também para os arquivos novos: sem isso, .jev/ e .claude/
@@ -172,10 +242,18 @@ export const prepare = (root, config, opts = {}) => {
   // etapa por etapa — 98% do custo do review era contexto re-cobrado a cada
   // turno de orquestração.
   const promptFile = path.join(dir, "review-prompt.md");
-  writeFileSync(
-    promptFile,
-    subagentPrompt(contextFile, config, det.findings.length),
-  );
+  let candidatos = [];
+  if (opts.decisionMap) {
+    candidatos = gerarDecisoes(root, diff);
+    writeFileSync(path.join(dir, "decision-map.md"), renderMapa(candidatos));
+    writeFileSync(path.join(dir, "decision-space.json"), JSON.stringify(candidatos, null, 1));
+    writeFileSync(
+      promptFile,
+      promptF1(path.basename(contextFile), config?.review?.max_findings ?? DEFAULT_MAX_FINDINGS),
+    );
+  } else {
+    writeFileSync(promptFile, subagentPrompt(contextFile, config, det.findings.length));
+  }
 
   return {
     gate: "passed",
@@ -188,5 +266,6 @@ export const prepare = (root, config, opts = {}) => {
     deterministic_findings: det.findings.length,
     deterministic_errors: det.errors,
     passes: config?.review?.passes ?? ["correctness", "tests"],
+    candidates: candidatos.length,
   };
 };

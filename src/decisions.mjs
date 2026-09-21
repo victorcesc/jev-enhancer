@@ -1,5 +1,19 @@
 // Decision space — transforma um diff em muitas decisões pequenas e checáveis.
 //
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ CONGELADO em dd5cd0af3dc6a38b.                                          │
+// │                                                                         │
+// │ O snapshot `fiado` do pdv virou DEVELOPMENT SET: os 27 defeitos         │
+// │ conhecidos foram usados para depurar este arquivo — quatro bugs foram   │
+// │ achados justamente cruzando gerador contra catálogo. Logo a cobertura   │
+// │ medida ali (18/27 bruto, 75% ponderada) é resultado de desenvolvimento, │
+// │ NÃO de generalização.                                                   │
+// │                                                                         │
+// │ A prova real exige uma feature/snapshot que este gerador nunca viu.     │
+// │ Até lá, não ajustar geradores contra aquele catálogo: seria caber o     │
+// │ experimento ao resultado desejado.                                      │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
 // A hipótese do experimento F: code review é hoje uma tarefa de DESCOBERTA
 // aberta ("ache o que estiver errado"), que é cara porque a LLM precisa varrer
 // o espaço inteiro. Se a parte estrutural virar perguntas fechadas, o Jev

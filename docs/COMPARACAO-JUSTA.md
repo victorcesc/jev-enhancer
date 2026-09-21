@@ -77,7 +77,19 @@ Mas encontraram coisas **diferentes**:
 | nomes de uma letra violam `.cursor/rules/RULES.md:56` (low) | — | ✓ |
 
 **6 em comum, 4 exclusivos de cada lado, 14 defeitos distintos na união.**
-Cada braço achou 10 de 14 — recall de **71%** contra a união, nos dois.
+
+> ⚠️ **O recall de 71% que este documento afirmava está errado** — ver
+> `EXPERIMENTO-ABC.md`. Ele usava como denominador os 14 defeitos que estes
+> dois reviews acharam, o que é circular: o denominador era a soma dos
+> numeradores, então qualquer um dos dois dava ~71% por construção.
+>
+> Com teto de achados folgado (20 em vez de 10), execuções posteriores acharam
+> **9 defeitos reais a mais**, todos verificados no código. Contra o conjunto
+> atual de 23, cada um destes reviews fez **10/23 = 43%**, e a união dos dois,
+> **14/23 = 61%**.
+>
+> A conclusão qualitativa — os dois empatam e acham coisas diferentes —
+> **continua válida**. Os percentuais, não.
 
 ### A única diferença de qualidade que aparece
 
@@ -157,8 +169,9 @@ contexto preparado.
 - **n=1 por braço**, uma tarefa, um repo, um modelo. A diferença de 1 achado
   med está dentro do ruído esperado.
 - A união de 14 defeitos **não é ground truth**: é a união do que dois reviews
-  acharam. O denominador real é desconhecido, então o recall de 71% é um limite
-  superior otimista dos dois lados.
+  acharam. O denominador real é desconhecido — e de fato subiu para 23 quando
+  mais execuções rodaram (ver `EXPERIMENTO-ABC.md`), então o recall citado era
+  um limite superior bem otimista dos dois lados.
 - O braço sem jev rodou em **contexto limpo**; o com jev rodou dentro de uma
   sessão com a implementação acumulada. Isso favorece o braço sem jev na conta
   de tokens (é a origem dos 325k de orquestração) e é, ao mesmo tempo, a

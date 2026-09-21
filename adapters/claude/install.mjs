@@ -24,15 +24,21 @@ const settingsPath = (scope, root) =>
     ? path.join(root, ".claude", "settings.json")
     : path.join(os.homedir(), ".claude", "settings.json");
 
-const hookCommand = () => {
+const hookCommand = (file) => {
   const here = path.dirname(new URL(import.meta.url).pathname);
-  return `node ${path.join(here, "stop-hook.mjs")}`;
+  return `node ${path.join(here, file)}`;
 };
 
 const isOurs = (entry) =>
   (entry?.hooks ?? []).some((h) => typeof h.command === "string" && h.command.includes(MARKER));
 
-/** Instala/atualiza a entrada de Stop preservando todo o resto. */
+/**
+ * Instala/atualiza NOSSAS entradas preservando todo o resto.
+ *
+ * Dois hooks desde o roteiro pós-experimento A/B/C:
+ *   SessionStart — o contrato ("review faz parte do pronto"). Gatilho principal.
+ *   Stop         — fallback, para quando o agente esquece.
+ */
 export const install = (scope, root) => {
   const file = settingsPath(scope, root);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -49,13 +55,22 @@ export const install = (scope, root) => {
   }
 
   settings.hooks = settings.hooks ?? {};
-  const stop = Array.isArray(settings.hooks.Stop) ? settings.hooks.Stop : [];
-  const ours = { hooks: [{ type: "command", command: hookCommand(), timeout: 60 }] };
-  const without = stop.filter((e) => !isOurs(e));
-  settings.hooks.Stop = [...without, ours];
+  let replaced = false;
+  for (const [evento, script, timeout] of [
+    ["SessionStart", "session-start-hook.mjs", 15],
+    ["Stop", "stop-hook.mjs", 60],
+  ]) {
+    const atuais = Array.isArray(settings.hooks[evento]) ? settings.hooks[evento] : [];
+    const outros = atuais.filter((e) => !isOurs(e));
+    replaced = replaced || outros.length !== atuais.length;
+    settings.hooks[evento] = [
+      ...outros,
+      { hooks: [{ type: "command", command: hookCommand(script), timeout }] },
+    ];
+  }
 
   writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
-  return { file, replaced: without.length !== stop.length };
+  return { file, replaced };
 };
 
 /**
@@ -77,12 +92,17 @@ export const selfTest = (scope, root) => {
     } catch (e) {
       structural.push(`settings.json ficou inválido: ${e.message}`);
     }
-    const registered = (parsed?.hooks?.Stop ?? []).some(isOurs);
-    if (!registered) structural.push("hook de Stop não está registrado no settings.json");
+    for (const evento of ["SessionStart", "Stop"]) {
+      if (!(parsed?.hooks?.[evento] ?? []).some(isOurs)) {
+        structural.push(`hook de ${evento} não está registrado no settings.json`);
+      }
+    }
   }
 
   const here = path.dirname(new URL(import.meta.url).pathname);
   const hookFile = path.join(here, "stop-hook.mjs");
+  const startFile = path.join(here, "session-start-hook.mjs");
+  if (!existsSync(startFile)) structural.push("session-start-hook.mjs não encontrado");
   if (!existsSync(hookFile)) {
     structural.push(`arquivo do hook não encontrado: ${hookFile}`);
   } else {

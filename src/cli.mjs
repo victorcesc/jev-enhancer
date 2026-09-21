@@ -15,6 +15,8 @@ import { verifyFindings, keep } from "./verify.mjs";
 import { renderStatus } from "./status.mjs";
 import { inspectRun, renderInspect } from "./inspect.mjs";
 import { record } from "./log.mjs";
+import { jevCommand, reviewInstruction } from "./contract.mjs";
+import { markReviewed } from "./session.mjs";
 
 const [, , cmd, ...args] = process.argv;
 const flag = (name) => {
@@ -94,6 +96,42 @@ const cmdPrepare = () => {
   console.log(JSON.stringify(out, null, 2));
 };
 
+/**
+ * `jev review` — dispara o review a pedido do agente (Etapa 2 do roteiro).
+ *
+ * É o mesmo trabalho que o Stop hook fazia, mas chamado ANTES de o agente
+ * tentar finalizar, como parte da Definition of Done. O Stop vira só rede.
+ *
+ * Fail-open como o hook: sem config ou com gate reprovado, marca a sessão
+ * como revisada e sai limpo — senão o fallback do Stop bloquearia uma sessão
+ * que não tem nada para revisar.
+ */
+const cmdReview = () => {
+  const cmd = jevCommand();
+  const config = loadConfig(root);
+  if (!config) {
+    console.log("jev-enhancer não está configurado neste repositório (rode `jev init`). Siga sem review.");
+    markReviewed(process.env.CLAUDE_CODE_SESSION_ID);
+    return;
+  }
+  let prep;
+  try {
+    prep = prepare(root, config, {});
+  } catch (e) {
+    console.log(`Não consegui preparar o review (${String(e.message ?? e).slice(0, 120)}). Siga sem review.`);
+    markReviewed(process.env.CLAUDE_CODE_SESSION_ID);
+    return;
+  }
+  if (prep.gate !== "passed") {
+    console.log(`Diff não justifica review (${prep.reason}). Nada a fazer.`);
+    record(root, { status: "skipped", stage: "review", gate: prep.gate, reason: prep.reason, stats: prep.stats });
+    markReviewed(process.env.CLAUDE_CODE_SESSION_ID);
+    return;
+  }
+  record(root, { status: "completed", stage: "review", gate: prep.gate, stats: prep.stats, trigger: "agent" });
+  console.log(reviewInstruction(prep.prompt_file, root));
+};
+
 const cmdVerify = async () => {
   const file = args.find((a) => !a.startsWith("--")) ?? ".jev/findings.json";
   let raw;
@@ -138,6 +176,11 @@ const cmdVerify = async () => {
   const ms = Date.now() - t0;
   const kept = keep(verified);
   const counts = verified.reduce((a, f) => ({ ...a, [f.verdict]: (a[f.verdict] ?? 0) + 1 }), {});
+  // Sinal de que o review ACONTECEU nesta sessão. O Stop hook consulta isso
+  // para virar fallback: se já revisou, sai em silêncio. A triagem é o ponto
+  // certo para marcar porque só se chega aqui com achados na mão.
+  markReviewed(process.env.CLAUDE_CODE_SESSION_ID);
+
   const outFile = path.join(root, ".jev", "findings-verified.json");
   writeFileSync(outFile, JSON.stringify({ mode, verdicts: counts, findings: kept }, null, 2));
   record(root, {
@@ -168,6 +211,7 @@ const HELP = `jev — code review agent-driven (jev-enhancer)
                         (rode com JEV_DEBUG=1 para ter o trace completo)
 
 internos (usados pelo adapter):
+  jev review                     dispara o review (o agente chama; faz parte do "pronto")
   jev prepare [--base <ref>]     gate + preparação de contexto (JSON)
   jev verify [findings.json]     triagem dos achados (JSON)
 
@@ -177,6 +221,7 @@ const main = async () => {
   switch (cmd) {
     case "init": return cmdInit();
     case "apply": return cmdApply();
+    case "review": return cmdReview();
     case "prepare": return cmdPrepare();
     case "verify": return cmdVerify();
     case "status": return cmdStatus();

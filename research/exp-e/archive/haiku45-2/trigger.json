@@ -1,5 +1,5 @@
 {
- "stop_blocks": 1,
+ "stop_blocks": 0,
  "trigger": "agente (Definition of Done)",
- "verificou": false
+ "verificou": true
 }

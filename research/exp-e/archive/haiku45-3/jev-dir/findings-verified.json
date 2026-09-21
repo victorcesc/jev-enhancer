@@ -1,0 +1,130 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 3,
+    "needs_context": 5,
+    "contradicted": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 645,
+      "symbol": "numericFloat",
+      "issue": "Silent error on numeric conversion failure: returns 0.0 when pgtype.Numeric cannot convert or is NULL. Hides data corruption and returns incorrect balance/amount values.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 2.17,
+        "evidence_sufficient": 0.75
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.83)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 69,
+      "symbol": "bearerRoutes",
+      "issue": "Route pattern /api/v1/customers/ is prefix; any path starting with this is bearer-only. Ensure no other /api/v1/customers/* endpoints require API key instead (mixed auth policies).",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.31,
+        "severity_score": 1.9,
+        "evidence_sufficient": 0.42
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.31) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 626,
+      "symbol": "ListPending",
+      "issue": "Silent error on NULL timestamp: ignores boolean return from timestamptzTime, uses time.Time zero for invalid/NULL sale_date. Clients receive 0001-01-01 instead of explicit error.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 1.76,
+        "evidence_sufficient": 0.77
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.86)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 660,
+      "symbol": "TestListPending_*",
+      "issue": "No test for NULL timestamps in rows. stubStore always returns valid time. Integration test (db_integration_test.go) also seeds valid dates only.",
+      "kind": "test",
+      "severity": "medium",
+      "jev": {
+        "valid": 0.45,
+        "severity_score": 1.17,
+        "evidence_sufficient": 0.69
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.45) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 240,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "CNPJ formatting may exceed 14 digits: fmt.Sprintf(\"%014d\", suffix+1) with suffix near 1_000_000_000_000 produces values > 14 digits. Should validate or use smaller range.",
+      "kind": "bug",
+      "severity": "medium",
+      "jev": {
+        "valid": 0.52,
+        "severity_score": 1.08,
+        "evidence_sufficient": 0.58
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.52)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 1095,
+      "symbol": "TestCustomerFiado_*",
+      "issue": "Missing test for cross-user customer access isolation. Handler auth layer protects, but no integration test verifies customer-to-user binding or prevents accessing another users customer.",
+      "kind": "test",
+      "severity": "high",
+      "jev": {
+        "valid": 0.34,
+        "severity_score": 0.91,
+        "evidence_sufficient": 0.6
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.34) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/cmd/server/main.go",
+      "line": 24,
+      "symbol": "MountFiado",
+      "issue": "MountFiado call depends on queries implementing PendingStore interface (GetCustomerByUserIDAndID, ListPendingFiadoSalesByCustomer, SummarizePendingFiadoSalesByCustomer). No compile-time check; relies on sqlc generation.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.21,
+        "severity_score": 0.74,
+        "evidence_sufficient": 0.5
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.21) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 936,
+      "symbol": "PendingSale.Data",
+      "issue": "Field name inconsistency: Go field is Data (English) but JSON tag is data. Consider renaming Go field to Date for clarity.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.14,
+        "severity_score": 0.07,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.14) mas nada no código contradiz"
+    }
+  ]
+}

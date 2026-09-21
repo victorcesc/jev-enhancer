@@ -17,6 +17,7 @@ import { loadConfig, findRepoRoot } from "../../src/config.mjs";
 import { collectDiff, defaultBase, evaluateGate, gitRoot } from "../../src/gate.mjs";
 import { claimRun, markReviewed } from "../../src/session.mjs";
 import { jevCommand, fallbackBlock } from "../../src/contract.mjs";
+import { precisaTriagem, triar } from "../../src/triage.mjs";
 import { record } from "../../src/log.mjs";
 import { trace } from "../../src/trace.mjs";
 
@@ -55,6 +56,29 @@ const main = async () => {
   const cwd = input.cwd ?? process.cwd();
   const root = gitRoot(cwd) ?? findRepoRoot(cwd);
   trace(root, "hook", { session: input.session_id ?? null, cwd, mode: "fallback" });
+
+  // 0. TRIAGEM GARANTIDA. Se o worker gravou achados e ninguém os triou, a
+  //    triagem roda AQUI — antes de qualquer decisão sobre bloquear. É o único
+  //    ponto do fluxo cuja execução não depende de o modelo obedecer, e foi
+  //    justamente onde o Haiku falhou 2 de 2 vezes: analisou 15 turnos e nunca
+  //    chamou o verify.
+  if (precisaTriagem(root)) {
+    const r = await triar(root);
+    if (r) {
+      trace(root, "triagem", { trigger: "hook", ...r });
+      markReviewed(input.session_id);
+      const linha = Object.entries(r.verdicts).map(([k, v]) => `${v} ${k}`).join(", ");
+      block(
+        [
+          `A triagem dos achados rodou automaticamente: ${r.total} achado(s), ${r.kept} para apresentar (${linha}).`,
+          "",
+          "Apresente ao usuário o conteúdo de `.jev/findings-verified.json`, ordenado",
+          "por severidade. Achados com veredito `contradicted` foram removidos por",
+          "evidência no código e NÃO devem ser apresentados.",
+        ].join("\n"),
+      );
+    }
+  }
 
   // 1. O caminho FELIZ agora é sair daqui: `jev verify` marcou a sessão como
   //    revisada quando o agente rodou o review por conta própria.

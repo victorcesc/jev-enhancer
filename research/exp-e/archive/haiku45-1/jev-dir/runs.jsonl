@@ -1,0 +1,3 @@
+{"at":"2026-09-21T17:15:58.838Z","status":"completed","stage":"review","gate":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"trigger":"agent"}
+{"at":"2026-09-21T17:17:13.201Z","status":"completed","stage":"fallback","gate":"passed","reason":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"session":"8b92c307-030e-4071-aee2-b11b8d215895"}
+{"at":"2026-09-21T17:17:18.447Z","status":"skipped","reason":"already_reviewed","session":"8b92c307-030e-4071-aee2-b11b8d215895","stage":"fallback"}

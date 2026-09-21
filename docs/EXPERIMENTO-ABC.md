@@ -106,8 +106,8 @@ de campo.
 
 ## O known defect set cresceu 64% durante a medição
 
-14 → 17 → 18 → 20 → 22 → 23 → 26 (o experimento D somou mais 3). Nove execuções, e defeitos inéditos ainda
-entraram na última.
+14 → 17 → 18 → 20 → 22 → 23, e depois 26 com o experimento D no mesmo
+snapshot. A tabela abaixo é só das 9 execuções do ABC.
 
 | execução | achou | inéditos |
 | --- | --- | --- |
@@ -131,7 +131,7 @@ denominador de 14. Aquele documento foi corrigido.
 ## Ressalvas
 
 - **n=3 por braço.** `A ~ B` é empate de faixas, não equivalência provada. A
-  variância dentro de B (43%–61%) é maior que a distância entre A e B.
+  variância dentro de B (38%–54%) é maior que a distância entre A e B.
 - **A análise de diversidade não é evidência independente**: usa as mesmas 9
   execuções que produziram o known set.
 - **Limitações uniformes entre braços**, que deprimem o recall absoluto de

@@ -71,6 +71,39 @@ index 541131f..4bb6a6a 100644
  )
  
 
+diff --git a/.findings.json b/.findings.json
+--- /dev/null
++++ b/.findings.json
+@@ -0,0 +1,28 @@
++{
++  "findings": [
++    {
++      "file": "packages/api-go/internal/handler/fiado.go",
++      "line": 62,
++      "symbol": "writeFiadoFailure",
++      "issue": "Erro não-AppError é convertido em INTERNAL_ERROR genérico sem logging; dificulta debug em produção",
++      "kind": "bug",
++      "severity": "med"
++    },
++    {
++      "file": "packages/api-go/internal/fiado/pending.go",
++      "line": 94,
++      "symbol": "numericFloat",
++      "issue": "Falhas de conversão pgtype.Numeric são silenciadas, retornando 0.0 sem logging",
++      "kind": "bug",
++      "severity": "med"
++    },
++    {
++      "file": "packages/api-go/internal/fiado/pending_test.go",
++      "line": 77,
++      "symbol": "TestListPending_success",
++      "issue": "Gap de cobertura: sem teste para row.SaleDate NULL ou inválido (linha 77 ignora o bool de validação)",
++      "kind": "rule",
++      "severity": "low"
++    }
++  ]
++}
+
 diff --git a/AGENTS.md b/AGENTS.md
 --- /dev/null
 +++ b/AGENTS.md

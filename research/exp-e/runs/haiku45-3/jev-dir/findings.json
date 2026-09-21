@@ -1,28 +1,53 @@
 {
   "findings": [
     {
-      "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 62,
-      "symbol": "writeFiadoFailure",
-      "issue": "Erro não-AppError é convertido em INTERNAL_ERROR genérico sem logging; dificulta debug em produção",
-      "kind": "bug",
-      "severity": "med"
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 659,
+      "severity": "high",
+      "summary": "SaleDate NULL or invalid silently converted to zero time without detection in loop",
+      "issue": "timestamptzTime() return value ignored; if row.SaleDate is invalid, time.Time{} is used silently"
     },
     {
       "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 94,
-      "symbol": "numericFloat",
-      "issue": "Falhas de conversão pgtype.Numeric são silenciadas, retornando 0.0 sem logging",
-      "kind": "bug",
-      "severity": "med"
+      "line": 676,
+      "severity": "high",
+      "summary": "numericFloat() silences conversion errors, returning 0 without logging",
+      "issue": "All numeric conversion failures (invalid types, overflow) collapse to 0.0 with no log or error propagation"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1076,
+      "severity": "high",
+      "summary": "Non-AppError exceptions swallowed without logging in writeFiadoFailure()",
+      "issue": "Unexpected errors bypass logging; production issues hidden behind generic INTERNAL_ERROR response"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 624,
+      "severity": "med",
+      "summary": "All non-404 customer lookup errors masked as generic INTERNAL_ERROR",
+      "issue": "Database/network errors indistinguishable from programming errors; hampers diagnosis"
     },
     {
       "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 77,
-      "symbol": "TestListPending_success",
-      "issue": "Gap de cobertura: sem teste para row.SaleDate NULL ou inválido (linha 77 ignora o bool de validação)",
-      "kind": "rule",
-      "severity": "low"
+      "line": 771,
+      "severity": "med",
+      "summary": "No test coverage for NULL or invalid SaleDate in ListPending",
+      "issue": "Edge case where row.SaleDate.Valid=false or pgtype error is not exercised"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "severity": "med",
+      "summary": "No test coverage for numericFloat conversion failures",
+      "issue": "Cannot verify behavior when pgtype.Numeric.Float64Value() returns error"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1062,
+      "severity": "low",
+      "summary": "httpx.WriteJSON result ignored; encoding errors undetected",
+      "issue": "Response write failure not checked; client may receive incomplete/malformed JSON silently"
     }
   ]
 }

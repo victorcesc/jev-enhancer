@@ -1,0 +1,60 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1075,
+      "symbol": "writeFiadoFailure",
+      "issue": "Non-AppError exceptions are caught and logged as generic INTERNAL_ERROR without exposing the underlying error. Production debugging becomes difficult when unexpected errors occur.",
+      "kind": "bug",
+      "severity": "high"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 676,
+      "symbol": "numericFloat",
+      "issue": "Numeric conversion errors and NULL values silently return 0.0 without logging. Masks data corruption or invalid database state.",
+      "kind": "bug",
+      "severity": "med"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 659,
+      "symbol": "ListPending",
+      "issue": "SaleDate.Valid flag is ignored; NULL dates silently become zero time.Time. Should log or handle explicitly.",
+      "kind": "bug",
+      "severity": "med"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1062,
+      "symbol": "CustomerFiado",
+      "issue": "httpx.WriteJSON error is silently dropped. Response write failures go unnoticed.",
+      "kind": "bug",
+      "severity": "med"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "symbol": "TestListPending_success",
+      "issue": "Missing test case: SaleDate.Valid=false (NULL). The handler ignores the valid flag on line 659.",
+      "kind": "rule",
+      "severity": "low"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "symbol": "TestListPending_success",
+      "issue": "Missing test case: numericFloat conversion failure (pgtype.Numeric with invalid data).",
+      "kind": "rule",
+      "severity": "low"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 1338,
+      "symbol": "TestCustomerFiado_serviceFailureIs500",
+      "issue": "Tests only AppError responses. Missing test for non-AppError panic/exception handling in writeFiadoFailure.",
+      "kind": "rule",
+      "severity": "low"
+    }
+  ]
+}

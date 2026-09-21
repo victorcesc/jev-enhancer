@@ -82,15 +82,23 @@ const renderContext = (diff, rules, detFindings) => {
 };
 
 /**
- * Protocolo do subagente — escrito para MINIMIZAR TURNOS.
+ * Protocolo do subagente.
  *
- * A versão anterior enumerava 5 passos e o subagente gastou 24 turnos: 19
- * deles produzindo 3-8 tokens cada, enquanto reliam ~71k de contexto. Pedir
- * orquestração produz orquestração.
+ * Duas lições medidas, que puxam em direções opostas:
  *
- * Esta versão descreve o RESULTADO esperado e a sequência exata de 3 ações,
- * em vez de etapas de raciocínio. As duas análises continuam existindo como
- * exigência do conteúdo, não como passos separados no tempo.
+ * 1. Pedir orquestração produz orquestração. A versão de 5 passos gastou 24
+ *    turnos, 19 deles produzindo 3-8 tokens enquanto reliam ~71k de contexto.
+ *
+ * 2. Pedir pressa produz análise rasa. Ao acrescentar "grave ASSIM QUE tiver
+ *    os achados, antes de qualquer verificação adicional", o Haiku 4.5 caiu
+ *    para exatamente 3 turnos em 3 de 3 execuções e o recall foi de ~22% para
+ *    11%. A frase existia para garantir a entrega e acabou cortando o
+ *    trabalho.
+ *
+ * Por isso INVESTIGAR e ENTREGAR são ações separadas: a 2 manda ir fundo no
+ * código, a 3 manda gravar antes de terminar. A garantia de entrega mudou de
+ * lugar — agora é o hook que tria (ver src/triage.mjs), então o protocolo não
+ * precisa comprar confiabilidade com profundidade.
  */
 // Teto de achados reportados. Era 10 por arbitrariedade; nas duas primeiras
 // medições os dois braços pararam exatamente em 10, o que torna impossível
@@ -101,20 +109,17 @@ const DEFAULT_MAX_FINDINGS = 20;
 const subagentPrompt = (contextFile, config, detCount) => {
   const rel = path.basename(contextFile);
   const maxFindings = config?.review?.max_findings ?? DEFAULT_MAX_FINDINGS;
-  return `Revisor de código sênior. Execute exatamente três ações, sem etapas
-intermediárias e sem narrar o que vai fazer. Cada turno seu relê todo o
-contexto acumulado e custa caro — trabalhe em silêncio e entregue.
+  return `Revisor de código sênior. Três ações, sem narrar o que vai fazer.
+Trabalhe em silêncio e entregue.
 
 AÇÃO 1 — Leia \`.jev/${rel}\` (diff, invariantes do repositório${
     detCount ? `, ${detCount} achado(s) já verificados por ferramenta` : ""
   }).
 
-AÇÃO 2 — Grave os achados em \`.jev/findings.json\` com a ferramenta Write:
-
-  {"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
-
-Grave o arquivo ASSIM QUE tiver os achados, antes de qualquer verificação
-adicional. Análise que não é gravada é análise perdida.
+AÇÃO 2 — INVESTIGUE o código de verdade. Leia os arquivos que o diff toca,
+siga cada símbolo citado até a definição, rode o build e os testes quando isso
+decidir alguma coisa. Achado que você não confirmou lendo o código não vale —
+e achado que você deixou de procurar por pressa também não.
 
 Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
 • correção — defeitos funcionais/lógicos do diff: estado inconsistente, caminhos
@@ -125,8 +130,14 @@ Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
   exercitados, testes que asseguram menos do que aparentam (campos declarados e
   nunca comparados, asserções ausentes).
 
-AÇÃO 3 — Responda SOMENTE o JSON abaixo. A triagem roda sozinha depois; você
-não precisa chamá-la.
+AÇÃO 3 — Grave os achados em \`.jev/findings.json\` com a ferramenta Write:
+
+  {"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
+
+Não termine sem gravar: análise que não é gravada é análise perdida. A
+triagem roda sozinha depois — você não precisa chamá-la.
+
+Depois responda SOMENTE o JSON abaixo.
 Máximo ${maxFindings} achados, ordenados por severidade; \`summary\` até 140 caracteres.
 Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
 

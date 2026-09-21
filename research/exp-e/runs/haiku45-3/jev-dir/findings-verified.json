@@ -1,54 +1,106 @@
 {
   "mode": "jev",
   "verdicts": {
-    "confirmed": 2,
-    "needs_context": 1
+    "confirmed": 7
   },
   "findings": [
     {
       "file": "packages/api-go/internal/fiado/pending.go",
-      "line": 94,
-      "symbol": "numericFloat",
-      "issue": "Falhas de conversão pgtype.Numeric são silenciadas, retornando 0.0 sem logging",
-      "kind": "bug",
-      "severity": "med",
+      "line": 676,
+      "severity": "high",
+      "summary": "numericFloat() silences conversion errors, returning 0 without logging",
+      "issue": "All numeric conversion failures (invalid types, overflow) collapse to 0.0 with no log or error propagation",
       "jev": {
-        "valid": 0.69,
-        "severity_score": 1.4,
-        "evidence_sufficient": 0.79
+        "valid": 0.88,
+        "severity_score": 2.04,
+        "evidence_sufficient": 0.75
       },
       "verdict": "confirmed",
-      "reason": "Jev confirma (valid=0.69)"
-    },
-    {
-      "file": "packages/api-go/internal/fiado/pending_test.go",
-      "line": 77,
-      "symbol": "TestListPending_success",
-      "issue": "Gap de cobertura: sem teste para row.SaleDate NULL ou inválido (linha 77 ignora o bool de validação)",
-      "kind": "rule",
-      "severity": "low",
-      "jev": {
-        "valid": 0.45,
-        "severity_score": 1.01,
-        "evidence_sufficient": 0.66
-      },
-      "verdict": "needs_context",
-      "reason": "Jev duvida (valid=0.45) mas nada no código contradiz"
+      "reason": "Jev confirma (valid=0.88)"
     },
     {
       "file": "packages/api-go/internal/handler/fiado.go",
-      "line": 62,
-      "symbol": "writeFiadoFailure",
-      "issue": "Erro não-AppError é convertido em INTERNAL_ERROR genérico sem logging; dificulta debug em produção",
-      "kind": "bug",
+      "line": 1076,
+      "severity": "high",
+      "summary": "Non-AppError exceptions swallowed without logging in writeFiadoFailure()",
+      "issue": "Unexpected errors bypass logging; production issues hidden behind generic INTERNAL_ERROR response",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 1.8,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 624,
       "severity": "med",
+      "summary": "All non-404 customer lookup errors masked as generic INTERNAL_ERROR",
+      "issue": "Database/network errors indistinguishable from programming errors; hampers diagnosis",
+      "jev": {
+        "valid": 0.66,
+        "severity_score": 1.66,
+        "evidence_sufficient": 0.59
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.66)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 1062,
+      "severity": "low",
+      "summary": "httpx.WriteJSON result ignored; encoding errors undetected",
+      "issue": "Response write failure not checked; client may receive incomplete/malformed JSON silently",
       "jev": {
         "valid": 0.63,
-        "severity_score": 0.99,
-        "evidence_sufficient": 0.81
+        "severity_score": 1.48,
+        "evidence_sufficient": 0.62
       },
       "verdict": "confirmed",
       "reason": "Jev confirma (valid=0.63)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 659,
+      "severity": "high",
+      "summary": "SaleDate NULL or invalid silently converted to zero time without detection in loop",
+      "issue": "timestamptzTime() return value ignored; if row.SaleDate is invalid, time.Time{} is used silently",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 1.39,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.82)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "severity": "med",
+      "summary": "No test coverage for NULL or invalid SaleDate in ListPending",
+      "issue": "Edge case where row.SaleDate.Valid=false or pgtype error is not exercised",
+      "jev": {
+        "valid": 0.68,
+        "severity_score": 1.07,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.68)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 771,
+      "severity": "med",
+      "summary": "No test coverage for numericFloat conversion failures",
+      "issue": "Cannot verify behavior when pgtype.Numeric.Float64Value() returns error",
+      "jev": {
+        "valid": 0.66,
+        "severity_score": 1.06,
+        "evidence_sufficient": 0.66
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.66)"
     }
   ]
 }

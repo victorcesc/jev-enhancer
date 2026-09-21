@@ -1,0 +1,54 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 2,
+    "needs_context": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "Falhas de conversão pgtype.Numeric são silenciadas, retornando 0.0 sem logging",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.69,
+        "severity_score": 1.4,
+        "evidence_sufficient": 0.79
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.69)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 77,
+      "symbol": "TestListPending_success",
+      "issue": "Gap de cobertura: sem teste para row.SaleDate NULL ou inválido (linha 77 ignora o bool de validação)",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.45,
+        "severity_score": 1.01,
+        "evidence_sufficient": 0.66
+      },
+      "verdict": "needs_context",
+      "reason": "Jev duvida (valid=0.45) mas nada no código contradiz"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Erro não-AppError é convertido em INTERNAL_ERROR genérico sem logging; dificulta debug em produção",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.63,
+        "severity_score": 0.99,
+        "evidence_sufficient": 0.81
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.63)"
+    }
+  ]
+}

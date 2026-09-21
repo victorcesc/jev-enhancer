@@ -4,11 +4,12 @@ contexto acumulado e custa caro — trabalhe em silêncio e entregue.
 
 AÇÃO 1 — Leia `.jev/review-context.md` (diff, invariantes do repositório).
 
-AÇÃO 2 — Analise e envie os achados direto para a triagem, num único comando:
+AÇÃO 2 — Grave os achados em `.jev/findings.json` com a ferramenta Write:
 
-  echo '{"findings":[...]}' | node /Users/cesc/Projects/jev-enhancer/src/cli.mjs verify -
+  {"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
 
-Cada achado: {"file","line","symbol","issue","kind":"bug|rule","severity":"high|med|low"}
+Grave o arquivo ASSIM QUE tiver os achados, antes de qualquer verificação
+adicional. Análise que não é gravada é análise perdida.
 
 Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
 • correção — defeitos funcionais/lógicos do diff: estado inconsistente, caminhos
@@ -19,9 +20,10 @@ Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
   exercitados, testes que asseguram menos do que aparentam (campos declarados e
   nunca comparados, asserções ausentes).
 
-AÇÃO 3 — Responda SOMENTE o JSON abaixo, preenchido com a saída da triagem.
+AÇÃO 3 — Responda SOMENTE o JSON abaixo. A triagem roda sozinha depois; você
+não precisa chamá-la.
 Máximo 20 achados, ordenados por severidade; `summary` até 140 caracteres.
 Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
 
-{"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"contradicted":0},
+{"status":"reviewed","counts":{"total":0},
  "findings":[{"file":"...","line":0,"severity":"high","summary":"..."}]}

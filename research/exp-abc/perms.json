@@ -1,5 +1,5 @@
 {
-  "_comment": "Allowlist compartilhada pelos tr\u00eas bra\u00e7os. Review \u00e9 somente leitura: o \u00fanico caminho de escrita \u00e9 o arquivo de achados. Nenhum comando destrutivo est\u00e1 liberado \u2014 o que n\u00e3o estiver aqui \u00e9 negado, n\u00e3o pendura a execu\u00e7\u00e3o headless.",
+  "_comment": "Allowlist dos tres bracos. Write e liberado para que o arquivo de achados possa ser gravado, mas todo arquivo de codigo esta no deny: o review reporta, nao conserta. Edit/MultiEdit ficam fora do allow, logo negados.",
   "permissions": {
     "defaultMode": "default",
     "allow": [
@@ -7,12 +7,7 @@
       "Grep",
       "Glob",
       "Agent",
-      "Write(.jev-exp/**)",
-      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev-exp/findings.json)",
-      "Write(.jev-exp/findings.json)",
-      "Write(.jev/**)",
-      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev-exp/**)",
-      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev/**)",
+      "Write",
       "Bash(tee .jev-exp/findings.json:*)",
       "Bash(go build:*)",
       "Bash(go vet:*)",
@@ -45,7 +40,19 @@
       "Bash(git push:*)",
       "Bash(curl:*)",
       "Bash(sqlc:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Write(**/*.go)",
+      "Write(**/*.sql)",
+      "Write(**/*.rs)",
+      "Write(**/*.mod)",
+      "Write(**/*.sum)",
+      "Write(**/*.ts)",
+      "Write(**/*.tsx)",
+      "Write(**/*.js)",
+      "Write(**/*.mjs)",
+      "Write(**/*.yaml)",
+      "Write(**/*.yml)",
+      "Write(**/*.toml)"
     ]
   }
 }

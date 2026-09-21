@@ -177,7 +177,10 @@ def usage(run: Path):
     sub, sub_turns = subagent_cost(d.get("session_id"))
     return {"cost_usd": d.get("total_cost_usd"), "tokens": main + sub,
             "main_tokens": main, "sub_tokens": sub, "sub_turns": sub_turns,
-            "output_tokens": u.get("output_tokens"), "turns": d.get("num_turns")}
+            "output_tokens": u.get("output_tokens"), "turns": d.get("num_turns"),
+            # turnos gastos em tentativa negada inflam o custo sem produzir
+            # análise: execução com negação não é pareável com uma sem.
+            "denials": len(d.get("permission_denials") or [])}
 
 
 def report(run: Path):
@@ -193,8 +196,9 @@ def report(run: Path):
         extra = (f"  (principal {u['main_tokens']:,} + subagente {u['sub_tokens']:,}"
                  f" em {u['sub_turns']} turnos)" if u.get("sub_tokens") else "")
         print(f"tokens: {u.get('tokens'):,}{extra}")
+        warn = f"  [{u['denials']} negacao(oes) de permissao — custo inflado]" if u.get("denials") else ""
         print(f"custo: ${u.get('cost_usd') or 0:.2f}  turnos principais: {u.get('turns')}"
-              f"  tempo: {seconds(run)}s")
+              f"  tempo: {seconds(run)}s{warn}")
     print(f"achou: {', '.join(s['found_known'])}")
     print(f"perdeu: {', '.join(s['missed_known'])}")
     if s["unmatched"]:

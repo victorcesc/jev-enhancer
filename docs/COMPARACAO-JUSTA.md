@@ -151,18 +151,23 @@ Não é review melhor. É:
 já que a análise em si custa o mesmo dos dois jeitos. Em dinheiro, o custo
 total empata.
 
-## Próximo experimento óbvio
+## Próximo experimento óbvio — JÁ FOI FEITO, e refutou a hipótese
 
-Um terceiro braço: **hook que só injeta "faça code review do diff", sem
-contexto preparado, sem protocolo, sem verificação.** Se ele achar os mesmos ~10
-defeitos, então a máquina toda (`prepare`, `review-context.md`,
-`review-prompt.md`, `verify`) não está pagando por si, e o produto se reduz a um
-hook de três linhas.
+A pergunta era: um **hook que só injeta "faça code review do diff"**, sem
+contexto preparado, sem protocolo, sem verificação, acharia os mesmos defeitos?
+Se sim, a máquina toda não estaria pagando por si.
 
-Os dados atuais **não descartam essa hipótese** — pelo contrário, apontam para
-ela: o contexto preparado (51.870 chars) não reduziu a investigação do
-subagente, que gastou os mesmos 26 turnos que a sessão standalone sem nenhum
-contexto preparado.
+**Resposta: não acharia.** Esse braço foi construído e rodado 3 vezes em
+`EXPERIMENTO-ABC.md`. Ele fica em 32% de recall contra 52% do pipeline
+completo, e as faixas nem se tocam. Mais decisivo ainda: **1× pipeline
+completo domina 2× gatilho mínimo** — mais recall (52% vs 46%) com menos
+tokens (1,91M vs 2,65M).
+
+A hipótese que eu registrei aqui — "o contexto preparado não reduziu a
+investigação do subagente, então não está pagando" — estava errada. Ele não
+paga por *encurtar* a investigação; paga por *enquadrar a tarefa*. O mesmo
+texto de instrução entregue como prompt do usuário rende 41%, e entregue como
+bloqueio de hook rende 32%.
 
 ## Ressalvas
 

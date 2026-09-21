@@ -100,6 +100,35 @@ worker sem nenhuma execução extra — é o que `--diversity` calcula.
 Só vale a pena rodar workers especializados (Experimento C) depois de ver se
 workers idênticos já pagam.
 
+## Limitações descobertas durante a execução
+
+Registradas aqui porque afetam a leitura dos números, e todas incidem
+igualmente nos três braços — deprimem o recall absoluto, não a comparação.
+
+**`go test` negado.** A allowlist tem `go build` e `go vet`, não `go test`.
+Nenhum braço conseguiu rodar a suíte. Efeito prático pequeno (o código não
+compila, então o teste falharia), mas custa turnos. Não corrigi no meio do
+lote: mudar permissão entre execuções cria mais inconsistência do que o ganho.
+
+**Comandos compostos negados.** Regras de permissão casam por prefixo, então
+`cd X && sed ...` não casa com `Bash(sed:*)`. Todos os braços perderam turnos
+nisso. `Read`/`Grep` estavam liberados como alternativa.
+
+**Permissões mudaram no meio do lote.** `Write(.jev-exp/**)` não casava com o
+caminho absoluto nesta versão do CLI (trust estava ok, stderr limpo). Corrigi
+invertendo a lógica — `Write` liberado, arquivos de código no `deny` — a
+partir de `b-2`. Execuções anteriores têm custo inflado por tentativas
+negadas; o `score.py` marca quais. **O recall não é afetado**: os achados
+foram capturados pelo fallback de JSON na resposta.
+
+**Andaime do experimento dentro do review.** Até `a-2`, `.claude/` aparecia
+como não versionado e `a-2` chegou a reportá-lo como defeito. Agora está em
+`.git/info/exclude`.
+
+**O known set cresceu durante a medição**, de 14 para 22. Recall de uma
+execução antiga contra o denominador final é justo (ela teve a mesma chance),
+mas qualquer número citado antes do fim do lote está defasado.
+
 ## Pendente
 
 Nenhuma execução real rodou: falta `ANTHROPIC_API_KEY` no ambiente. Todo o

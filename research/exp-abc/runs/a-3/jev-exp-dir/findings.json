@@ -1,0 +1,67 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "sqlc não foi regenerado: query/fiado.sql foi adicionado mas internal/db/fiado.sql.go não existe. `go build ./...` falha com 8 erros `undefined: db.GetCustomerByUserIDAndIDParams`, `db.ListPendingFiadoSalesByCustomerParams`, `db.ListPendingFiadoSalesByCustomerRow`, `db.SummarizePendingFiadoSalesByCustomerParams`, `db.SummarizePendingFiadoSalesByCustomerRow`. O módulo inteiro (incluindo cmd/server) não compila e `go vet ./internal/db/...` também quebra em fiado_integration_test.go:107. Falta rodar `make -C packages/api-go sqlc` e versionar o arquivo gerado."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "O subselect `SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id` agrega a tabela `payments` inteira (todos os usuários) antes do LEFT JOIN. O planner do PostgreSQL não consegue empurrar `s.user_id`/`s.customer_id` para dentro de uma subquery com GROUP BY, então cada requisição faz um scan+agregação completo de `payments` — duas vezes (a mesma subquery se repete em SummarizePendingFiadoSalesByCustomer, linha 48). O comentário de paridade cita o SQLite do desktop, que é single-tenant e local; na API cloud multi-tenant isso degrada linearmente com o total de pagamentos de todos os clientes. Uma subquery correlacionada/LATERAL filtrada por `p.sale_id = s.id` usaria `payments_sale_id_idx`."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "PendingService.ListPending / internalError",
+      "severity": "med",
+      "issue": "Os três erros de banco (linhas 42, 50 e 73) são descartados: `internalError()` cria um AppError novo sem `%w` e sem logar. O handler (internal/handler/fiado.go:62 writeFiadoFailure) também não loga. Resultado: qualquer falha de query vira um 500 genérico sem nenhum rastro em log — impossível diagnosticar em produção. Contraria a regra do AGENTS.md \"Return errors from lower layers and log at process or handler boundaries\" e \"Wrap inspectable errors with %w\"."
+    },
+    {
+      "file": "AGENTS.md",
+      "line": 45,
+      "symbol": "Common Commands / Testing And Verification",
+      "severity": "med",
+      "issue": "`npm run typecheck` é recomendado como verificação (linhas 45 e 90) mas é um no-op. O script raiz é `npm run typecheck --workspaces --if-present` e packages/desktop/package.json não define `typecheck` (só dev/build/preview/tauri/tauri:dev/tauri:build). O comando sai com código 0 sem verificar nada, dando falsa confiança de que a mudança de TypeScript foi validada."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 60,
+      "symbol": "Page.TotalPages / Page.Offset",
+      "severity": "low",
+      "issue": "`Page` é exportado com campos exportados e `PendingService.ListPending` aceita qualquer `Page`, mas ambos os métodos assumem que ela veio de `NewPage`. `Page{}.TotalPages(5)` faz `5 / 0` e causa panic de divisão inteira (o guard só cobre `total <= 0`). `Page{Number: 0, Limit: 20}.Offset()` devolve -20, que o PostgreSQL rejeita com \"OFFSET must not be negative\". Latente hoje (o handler sempre usa NewPage), mas sem proteção para novos chamadores."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "`saleDate, _ := timestamptzTime(row.SaleDate)` descarta o booleano de validade, então o valor de retorno de `timestamptzTime` (linha 102) é código morto. Se `sale_date` vier inválido/NULL, a resposta serializa silenciosamente `\"data\": \"0001-01-01T00:00:00Z\"` em vez de sinalizar o problema."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "Em caso de erro de conversão ou NUMERIC inválido (p.ex. NaN), `numericFloat` devolve 0 silenciosamente. Como isso alimenta `TotalDevido`, `ValorOriginal`, `ValorPago` e `Saldo`, uma dívida real pode ser reportada ao cliente como R$ 0,00 sem nenhum erro nem log."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "`SummarizePendingFiadoSalesByCustomer` e `ListPendingFiadoSalesByCustomer` são executadas como duas queries independentes, fora de transação. Um pagamento registrado entre as duas deixa `total_devido`/`pagination.total` inconsistentes com `data` (ex.: `total: 2` com 3 itens retornados, ou soma que não bate com os saldos listados)."
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "severity": "low",
+      "issue": "`writeFiadoFailure` é uma cópia literal de `writeSyncFailure` (internal/handler/sync_response.go:12) no mesmo pacote `handler`; só muda o tipo do struct de resposta (fiado.FailureResponse vs sync.FailureResponse, que têm campos idênticos) e a mensagem padrão. Duplicação evitável com um helper único parametrizado pela mensagem."
+    }
+  ]
+}

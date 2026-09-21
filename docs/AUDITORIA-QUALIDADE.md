@@ -61,9 +61,20 @@ diferente e com o protocolo anterior.
 
 # Sem jev vs com jev — tempo, eficiência e cobertura
 
-A comparação é limpa porque o hook só dispara no **Stop**: tudo antes do
-bloqueio é exatamente o que aconteceria sem a ferramenta. Mesma feature, mesma
-sessão, mesmo modelo.
+> ⚠️ **ESTA COMPARAÇÃO É ENGANOSA — leia `COMPARACAO-JUSTA.md`.**
+>
+> O braço "sem jev" desta tabela **nunca recebeu um pedido de code review**.
+> Os "0 de 10 bugs" medem a ausência de um gatilho, não a incapacidade do
+> modelo de revisar. Refeito com os dois braços pedindo review explicitamente,
+> o resultado se inverte: **10 achados cada, 20/20 reais, custo empatado**.
+>
+> O que esta seção mede de fato, e continua válido: **um agente deixado por
+> conta própria não revisa o próprio trabalho.**
+
+A comparação abaixo é limpa quanto ao *isolamento* — o hook só dispara no
+**Stop**, então tudo antes do bloqueio é exatamente o que aconteceria sem a
+ferramenta. Mesma feature, mesma sessão, mesmo modelo. O que ela **não** é:
+uma comparação de qualidade de review.
 
 | | sem jev | com jev | delta |
 | --- | --- | --- | --- |
@@ -97,15 +108,17 @@ comando teria revelado, e que o agente não executou.
 
 ## Cobertura
 
-**Sem jev: 0 de 10. Com jev: 10 de 10.**
+**Sem jev (não instruído a revisar): 0 de 10. Com jev: 10 de 10.**
 
 Ressalva importante: isso é cobertura *sobre os 10 achados auditados*, não
 sobre o universo de defeitos do diff. Não sabemos quantos ainda escaparam —
-medir isso exigiria auditar manualmente as 1.400 linhas. O recall que temos
-(0,89) vem do benchmark v2.6, num diff diferente.
+medir isso exigiria auditar manualmente as 1.400 linhas.
 
-O que se pode afirmar com segurança: dos defeitos que a ferramenta encontrou,
-**todos são reais, e o agente sozinho não encontrou nenhum deles.**
+**Ressalva maior (ver `COMPARACAO-JUSTA.md`):** o "0 de 10" não sobrevive ao
+teste pareado. Quando o mesmo modelo, no mesmo código, recebe um pedido
+explícito de review, ele acha **10 defeitos reais** — 6 dos mesmos 10 acima e
+4 outros que a ferramenta não achou. A afirmação defensável não é "o agente
+sozinho não encontra esses defeitos"; é **"o agente sozinho não procura"**.
 
 ## Leitura
 
@@ -114,6 +127,13 @@ código que não compila**, é uma troca favorável em quase qualquer cenário �
 principalmente porque o bug mais grave (build quebrado) seria descoberto de
 qualquer forma, só que mais tarde e mais caro: no CI, no PR, ou pelo
 desenvolvedor abrindo o projeto.
+
+**Correção:** essa leitura atribui à ferramenta um mérito que é do modelo. O
+teste pareado mostra que a LLM acha esses defeitos sozinha quando lhe pedem,
+pelo mesmo custo. O que se compra com os +53% de tempo não são os 10 defeitos —
+é **o review acontecer sem ninguém pedir**. Continua sendo uma troca favorável,
+mas por outro motivo: o custo real é o do gatilho (325k tokens, ~23%), não o da
+análise, que sai igual dos dois jeitos.
 
 ---
 

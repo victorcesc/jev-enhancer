@@ -21,6 +21,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { missingEvidence, retrieve } from "./retrieve.mjs";
+import { refutaInexistencia } from "./claims.mjs";
 
 export const findKey = (start) => {
   const env = (process.env.TYPESAFE_AI_API_KEY ?? "").trim();
@@ -173,10 +174,53 @@ const resolveNeedsContext = async (key, verified, findings, diff, root) => {
   return { verified: out, usage: json.usage ?? {}, retrieved: names };
 };
 
+/**
+ * Passada 0 — refutação determinística, antes de qualquer chamada ao Jev.
+ *
+ * Achado que afirma "X não existe" quando X existe é falso por FATO, não por
+ * probabilidade. O Jev errava exatamente aqui: perguntado "o símbolo aparece
+ * definido?" acertava (0,75), mas ao compor isso com o achado devolvia
+ * valid=0,83 para a alucinação. A composição saiu do modelo e virou `grep`.
+ */
+const refutacaoDeterministica = (findings, root) =>
+  findings.map((f) => {
+    let prova = null;
+    try {
+      prova = refutaInexistencia(f, root);
+    } catch {
+      /* refutação é oportunista: erro aqui não pode travar a triagem */
+    }
+    if (!prova) return null;
+    return {
+      ...f,
+      jev: { valid: 0, severity_score: SEVERITY_RANK[(f.severity ?? "low").toLowerCase()] ?? 1, evidence_sufficient: 1 },
+      verdict: "contradicted",
+      reason: `${prova.symbol} está definido em ${prova.file}:${prova.line} — a premissa é falsa`,
+      resolved_by: "determinístico",
+    };
+  });
+
 export const verifyFindings = async (findings, cwd, diff = "") => {
   if (findings.length === 0) return { findings: [], mode: "jev", usage: {} };
-  const key = findKey(cwd ?? process.cwd());
-  if (!key) return mockVerify(findings); // fail-open: sem chave, não trava
+  const root = cwd ?? process.cwd();
+
+  // O que o código já refuta não precisa de modelo nem de chave.
+  const refutados = refutacaoDeterministica(findings, root);
+  const pendentes = findings.filter((_, i) => !refutados[i]);
+  const costura = (julgados) => {
+    let j = 0;
+    return refutados.map((r) => r ?? julgados[j++]);
+  };
+  if (pendentes.length === 0) {
+    return { findings: refutados, mode: "determinístico", usage: {} };
+  }
+  findings = pendentes;
+
+  const key = findKey(root);
+  if (!key) {
+    const m = mockVerify(findings);
+    return { ...m, findings: costura(m.findings) };
+  }
 
   const items = {};
   const questions = {};
@@ -218,10 +262,16 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
       body: JSON.stringify({ model: "jev-latest", state: { diff, findings: items }, questions }),
       signal: AbortSignal.timeout(90_000),
     });
-    if (!res.ok) return mockVerify(findings); // fail-open
+    if (!res.ok) {
+      const m = mockVerify(findings);
+      return { ...m, findings: costura(m.findings) };
+    }
     json = await res.json();
   } catch {
-    return mockVerify(findings); // fail-open: Jev fora do ar não trava o fluxo
+    // fail-open: Jev fora do ar não trava o fluxo — mas o que o código já
+    // refutou continua refutado, porque isso não dependeu do Jev.
+    const m = mockVerify(findings);
+    return { ...m, findings: costura(m.findings) };
   }
 
   const out = findings.map((f, i) => {
@@ -259,8 +309,8 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
     };
   });
   // Exp. 5 — resolve os needs_context com busca determinística, sem LLM.
-  const second = await resolveNeedsContext(key, out, findings, diff, cwd ?? process.cwd());
-  const final = second.verified;
+  const second = await resolveNeedsContext(key, out, findings, diff, root);
+  const final = costura(second.verified);
   final.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
   return {
     findings: final,

@@ -104,12 +104,31 @@ const cmdVerify = async () => {
   } catch (e) {
     die(`não consegui ler os achados em ${file}: ${e.message}`);
   }
-  const { findings: verified, mode } = await verifyFindings(findings, root);
+  // o diff congelado no bloqueio é a evidência que o Jev usa para julgar
+  let diff = "";
+  try {
+    const ctx = readFileSync(path.join(root, ".jev", "review-context.md"), "utf8");
+    diff = /```diff\n([\s\S]*?)\n```/.exec(ctx)?.[1] ?? "";
+  } catch {
+    /* sem contexto: o Jev julga só pelo texto do achado */
+  }
+
+  const t0 = Date.now();
+  const { findings: verified, mode, usage } = await verifyFindings(findings, root, diff);
+  const ms = Date.now() - t0;
   const kept = keep(verified);
+  const counts = verified.reduce((a, f) => ({ ...a, [f.verdict]: (a[f.verdict] ?? 0) + 1 }), {});
   const outFile = path.join(root, ".jev", "findings-verified.json");
-  writeFileSync(outFile, JSON.stringify({ mode, findings: kept }, null, 2));
-  record(root, { status: "completed", stage: "verify", findings: findings.length, verified: kept.length, mode });
-  console.log(JSON.stringify({ mode, total: findings.length, kept: kept.length, output: path.relative(root, outFile) }, null, 2));
+  writeFileSync(outFile, JSON.stringify({ mode, verdicts: counts, findings: kept }, null, 2));
+  record(root, {
+    status: "completed", stage: "verify", mode,
+    findings: findings.length, verified: kept.length,
+    verdicts: counts, jev_tokens: usage?.input_tokens ?? 0, ms,
+  });
+  console.log(JSON.stringify({
+    mode, total: findings.length, kept: kept.length, verdicts: counts,
+    jev_tokens: usage?.input_tokens ?? 0, ms, output: path.relative(root, outFile),
+  }, null, 2));
 };
 
 const cmdStatus = () => console.log(renderStatus(root));

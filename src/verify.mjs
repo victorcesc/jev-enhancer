@@ -1,14 +1,19 @@
-// verify — triagem dos achados.
+// verify — triagem dos achados com o Jev (decision model da TypeSafe).
 //
-// MILESTONE 1: implementação SIMPLIFICADA de propósito. O objetivo agora é
-// provar que o ciclo automático fecha (sem loop, sem atrapalhar o agente).
-// O verificador real (Jev: valid / severity / evidence_sufficient) entra
-// depois, trocando só o corpo de `verifyFindings` — o contrato de saída já é
-// o definitivo.
+// Padrão generate-then-verify: a LLM gera candidatos (criativa, recall alto,
+// ruidosa); o Jev verifica cada um com probabilidade calibrada (barato, não
+// inventa). Uma chamada só, com fan-out de perguntas por achado.
 //
-// Regra que NÃO muda quando o real entrar: evidência insuficiente nunca é
-// tratada como achado falso. No teste de estresse, foi exatamente essa regra
-// que impediu o descarte do defeito mais grave.
+// O Jev fica FORA do loop da LLM: a triagem não entra no contexto do agente,
+// então não é re-cobrada a cada turno.
+//
+// Regra crítica, validada em teste de estresse (9 achados reais + 8
+// alucinações plausíveis): evidência insuficiente NUNCA é tratada como achado
+// falso. Foi ela que impediu o descarte do defeito mais grave, que o Jev não
+// conseguia confirmar só com o diff.
+//
+// Sem chave, cai para o modo `mock` em vez de falhar — princípio do fail-open:
+// a ausência de uma dependência externa não pode travar o fluxo do agente.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -31,25 +36,100 @@ export const findKey = (start) => {
 
 const SEVERITY_RANK = { high: 3, med: 2, medium: 2, low: 1 };
 
+const SEVERITY_LEVELS = [
+  "não é defeito / observação de estilo",
+  "baixa: impacto pequeno ou caso extremo",
+  "média: comportamento incorreto em uso normal",
+  "alta: quebra a funcionalidade ou vaza dados em produção",
+];
+
+// Limiares. `validFloor` veio do teste de estresse: abaixo dele o Jev está
+// CONFIANTE de que o achado é falso, e aí evidência baixa não deve salvá-lo —
+// uma alucinação ("loop de retry com off-by-one", código inexistente) recebia
+// valid=0.02 com evidence=0.23 e escapava como needs_context.
+const VALID_MIN = 0.5;
+const EVIDENCE_MIN = 0.4;
+const VALID_FLOOR = 0.15;
+
+const mockVerify = (findings) => {
+  const out = findings.map((f) => ({
+    ...f,
+    jev: { valid: null, severity_score: SEVERITY_RANK[(f.severity ?? "low").toLowerCase()] ?? 1, evidence_sufficient: null },
+    verdict: "confirmed",
+  }));
+  out.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
+  return { findings: out, mode: "mock", usage: {} };
+};
+
 /**
- * Contrato de saída (estável entre o mock e o real):
- *   { findings: [{ ...original, jev: {valid, severity, evidence_sufficient}, verdict }],
+ * Contrato de saída (idêntico entre mock e real):
+ *   { findings: [{ ...original, jev: {valid, severity_score, evidence_sufficient}, verdict }],
  *     mode: "mock" | "jev", usage }
  * verdict ∈ confirmed | needs_context | rejected
  */
-export const verifyFindings = async (findings, cwd) => {
-  // MOCK: sem chamada externa. Confirma tudo e ordena por severidade
-  // declarada, preservando o formato que o real vai devolver.
-  const out = findings.map((f) => {
-    const rank = SEVERITY_RANK[(f.severity ?? "low").toLowerCase()] ?? 1;
+export const verifyFindings = async (findings, cwd, diff = "") => {
+  if (findings.length === 0) return { findings: [], mode: "jev", usage: {} };
+  const key = findKey(cwd ?? process.cwd());
+  if (!key) return mockVerify(findings); // fail-open: sem chave, não trava
+
+  const items = {};
+  const questions = {};
+  findings.forEach((f, i) => {
+    const id = `f${i}`;
+    items[id] = { file: f.file, symbol: f.symbol, issue: f.issue };
+    questions[`${id}_valid`] = {
+      type: "noul",
+      instructions: `O achado state.findings.${id} descreve um defeito REAL no código sob revisão (state.diff)? Considere falso se for opinião de estilo, se o código citado não existir, ou se a premissa estiver errada.`,
+    };
+    questions[`${id}_sev`] = {
+      type: "score",
+      instructions: `Assumindo que o achado state.findings.${id} seja real, qual a gravidade do impacto?`,
+      criteria: SEVERITY_LEVELS,
+    };
+    questions[`${id}_ev`] = {
+      type: "noul",
+      instructions: `O que está em state É SUFICIENTE para julgar o achado state.findings.${id} com segurança? Responda falso se para decidir seria necessário ver código que não está aqui.`,
+    };
+  });
+
+  let json;
+  try {
+    const res = await fetch("https://api.typesafe.ai/v1/systemone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: "jev-latest", state: { diff, findings: items }, questions }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok) return mockVerify(findings); // fail-open
+    json = await res.json();
+  } catch {
+    return mockVerify(findings); // fail-open: Jev fora do ar não trava o fluxo
+  }
+
+  const out = findings.map((f, i) => {
+    const id = `f${i}`;
+    const valid = json.answers?.[`${id}_valid`]?.noul ?? 0;
+    const evidence = json.answers?.[`${id}_ev`]?.noul ?? 0;
+    const sev = json.answers?.[`${id}_sev`]?.score ?? 0;
+    // ordem importa: confiantemente falso → rejeita; evidência fraca →
+    // needs_context (nunca descarta o possivelmente real); senão, validade.
+    let verdict;
+    if (valid < VALID_FLOOR) verdict = "rejected";
+    else if (evidence < EVIDENCE_MIN) verdict = "needs_context";
+    else if (valid >= VALID_MIN) verdict = "confirmed";
+    else verdict = "rejected";
     return {
       ...f,
-      jev: { valid: null, severity_score: rank, evidence_sufficient: null },
-      verdict: "confirmed",
+      jev: {
+        valid: Number(valid.toFixed(2)),
+        severity_score: Number(sev.toFixed(2)),
+        evidence_sufficient: Number(evidence.toFixed(2)),
+      },
+      verdict,
     };
   });
   out.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
-  return { findings: out, mode: "mock", usage: {} };
+  return { findings: out, mode: "jev", usage: json.usage ?? {} };
 };
 
 /** Achados que o usuário deve ver: confirmados + os que pedem mais contexto. */

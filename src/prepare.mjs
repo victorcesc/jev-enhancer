@@ -83,7 +83,10 @@ const renderContext = (diff, rules, detFindings) => {
 
 export const prepare = (root, config, opts = {}) => {
   const base = opts.base ?? defaultBase(root);
-  const { diff } = collectDiff(root, base);
+  // ignore_paths vale também para os arquivos novos: sem isso, .jev/ e .claude/
+  // entram no diff como ruído e competem com o código pelo contexto.
+  const ignore = Array.isArray(config?.gate?.ignore_paths) ? config.gate.ignore_paths : [];
+  const { diff } = collectDiff(root, base, [...ignore, ".jev/", ".claude/"]);
   const gate = evaluateGate(root, config, diff);
 
   if (!gate.pass) {

@@ -7,6 +7,7 @@
 // linha ou um ajuste de doc pagaria o mesmo preço de uma feature inteira, e a
 // economia da ferramenta evapora.
 import { spawnSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const git = (root, args, timeoutMs = 5000) => {
@@ -18,19 +19,45 @@ const git = (root, args, timeoutMs = 5000) => {
   }
 };
 
-/** Mudanças do branch contra a base, incluindo não-commitadas. */
-export const collectDiff = (root, base) => {
+const MAX_UNTRACKED_BYTES = 200_000; // por arquivo; acima disso vira marcador
+
+/**
+ * Mudanças do branch contra a base, incluindo não-commitadas E o CONTEÚDO dos
+ * arquivos novos.
+ *
+ * O conteúdo importa mais do que parece: numa feature típica quase todo o
+ * código novo vive em arquivos ainda não rastreados. Emitir só o cabeçalho
+ * deles (como esta função fazia) entrega ao revisor uma lista de nomes sem
+ * código — e o verificador corretamente responde "evidência insuficiente"
+ * para tudo. Foi exatamente assim que este bug foi descoberto.
+ */
+export const collectDiff = (root, base, ignorePaths = []) => {
   const committed = base ? git(root, ["diff", `${base}...HEAD`]) ?? "" : "";
   const working = git(root, ["diff", "HEAD"]) ?? "";
   const untracked = (git(root, ["ls-files", "--others", "--exclude-standard"]) ?? "")
     .split("\n")
-    .filter(Boolean);
-  // arquivos novos não aparecem em `git diff`; incluímos o conteúdo deles
+    .filter(Boolean)
+    .filter((f) => !ignorePaths.some((p) => f.startsWith(p)));
+
   let extra = "";
-  for (const f of untracked.slice(0, 50)) {
-    const content = git(root, ["show", `:${f}`]) ?? null;
-    void content;
-    extra += `\n--- /dev/null\n+++ b/${f}\n`;
+  for (const f of untracked.slice(0, 100)) {
+    let content;
+    try {
+      const full = path.join(root, f);
+      const bytes = statSync(full).size;
+      if (bytes > MAX_UNTRACKED_BYTES) {
+        extra += `\ndiff --git a/${f} b/${f}\n--- /dev/null\n+++ b/${f}\n@@ -0,0 +1,1 @@\n+[arquivo novo de ${bytes} bytes, omitido por tamanho]\n`;
+        continue;
+      }
+      content = readFileSync(full, "utf8");
+      if (content.includes("\0")) continue; // binário
+    } catch {
+      continue; // ilegível: pula, nunca derruba
+    }
+    const lines = content.split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    extra += `\ndiff --git a/${f} b/${f}\n--- /dev/null\n+++ b/${f}\n@@ -0,0 +1,${lines.length} @@\n`;
+    extra += lines.map((l) => `+${l}`).join("\n") + "\n";
   }
   return { diff: committed + working + extra, untracked };
 };

@@ -1,5 +1,5 @@
 {
-  "_comment": "Allowlist compartilhada pelos três braços. Review é somente leitura: o único caminho de escrita é o arquivo de achados. Nenhum comando destrutivo está liberado — o que não estiver aqui é negado, não pendura a execução headless.",
+  "_comment": "Allowlist compartilhada pelos tr\u00eas bra\u00e7os. Review \u00e9 somente leitura: o \u00fanico caminho de escrita \u00e9 o arquivo de achados. Nenhum comando destrutivo est\u00e1 liberado \u2014 o que n\u00e3o estiver aqui \u00e9 negado, n\u00e3o pendura a execu\u00e7\u00e3o headless.",
   "permissions": {
     "defaultMode": "default",
     "allow": [
@@ -8,7 +8,12 @@
       "Glob",
       "Agent",
       "Write(.jev-exp/**)",
+      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev-exp/findings.json)",
+      "Write(.jev-exp/findings.json)",
       "Write(.jev/**)",
+      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev-exp/**)",
+      "Write(//Users/cesc/Projects/pdv-feat-baseline/.jev/**)",
+      "Bash(tee .jev-exp/findings.json:*)",
       "Bash(go build:*)",
       "Bash(go vet:*)",
       "Bash(go doc:*)",

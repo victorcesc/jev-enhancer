@@ -44,12 +44,40 @@ def match(f: dict):
     return [i for _, i in hits]
 
 
-def load_findings(run: Path):
-    p = run / "findings.json"
+def _from_transcript(run: Path):
+    """Resgata os achados do texto da resposta quando o arquivo não saiu.
+
+    Uma execução onde o `Write` foi negado ainda fez o review inteiro; perder
+    os achados por causa da permissão seria jogar fora dado bom. Procura um
+    bloco ```json com `findings`, e, se não houver, um objeto JSON solto.
+    """
+    p = run / "result.json"
     if not p.exists():
         return None
-    data = json.loads(p.read_text())
-    return data["findings"] if isinstance(data, dict) else data
+    try:
+        text = (json.loads(p.read_text()).get("result") or "")
+    except Exception:
+        return None
+    import re
+
+    blocks = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    blocks += re.findall(r'(\{\s*"findings"\s*:\s*\[.*?\]\s*\})', text, re.S)
+    for b in blocks:
+        try:
+            d = json.loads(b)
+        except Exception:
+            continue
+        if isinstance(d, dict) and isinstance(d.get("findings"), list) and d["findings"]:
+            return d["findings"]
+    return None
+
+
+def load_findings(run: Path):
+    p = run / "findings.json"
+    if p.exists():
+        data = json.loads(p.read_text())
+        return data["findings"] if isinstance(data, dict) else data
+    return _from_transcript(run)
 
 
 def score(run: Path):

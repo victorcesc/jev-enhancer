@@ -13,6 +13,7 @@ import { gitRoot } from "./gate.mjs";
 import { prepare } from "./prepare.mjs";
 import { verifyFindings, keep } from "./verify.mjs";
 import { renderStatus } from "./status.mjs";
+import { inspectRun, renderInspect } from "./inspect.mjs";
 import { record } from "./log.mjs";
 
 const [, , cmd, ...args] = process.argv;
@@ -113,11 +114,19 @@ const cmdVerify = async () => {
 
 const cmdStatus = () => console.log(renderStatus(root));
 
+const cmdInspect = () => {
+  const session = args.find((a) => !a.startsWith("--"));
+  console.log(renderInspect(inspectRun(root, session)));
+};
+
 const HELP = `jev — code review agent-driven (jev-enhancer)
 
   jev init              cria .jev/config.yaml neste repositório
   jev apply claude      instala o adapter no Claude Code (+ self-test)
   jev status            mostra a última execução (never_run/skipped/completed/failed)
+  jev inspect [sessão]  autópsia: onde parou, se o protocolo foi seguido,
+                        custo do review e se o read-only foi respeitado
+                        (rode com JEV_DEBUG=1 para ter o trace completo)
 
 internos (usados pelo adapter):
   jev prepare [--base <ref>]     gate + preparação de contexto (JSON)
@@ -132,6 +141,7 @@ const main = async () => {
     case "prepare": return cmdPrepare();
     case "verify": return cmdVerify();
     case "status": return cmdStatus();
+    case "inspect": return cmdInspect();
     default: console.log(HELP);
   }
 };

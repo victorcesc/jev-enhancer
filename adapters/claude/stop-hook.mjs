@@ -15,6 +15,7 @@ import { gitRoot } from "../../src/gate.mjs";
 import { prepare } from "../../src/prepare.mjs";
 import { claimRun, markReviewed } from "../../src/session.mjs";
 import { record } from "../../src/log.mjs";
+import { trace } from "../../src/trace.mjs";
 
 const BUDGET_MS = 60_000; // teto do hook inteiro
 const watchdog = setTimeout(() => process.exit(0), BUDGET_MS);
@@ -79,9 +80,11 @@ const main = async () => {
   }
   const cwd = input.cwd ?? process.cwd();
   const root = gitRoot(cwd) ?? findRepoRoot(cwd);
+  trace(root, "hook", { session: input.session_id ?? null, cwd });
 
   // 1. session guard — antes de qualquer trabalho
   const claim = claimRun(input.session_id);
+  trace(root, "guard", { proceed: claim.proceed, reason: claim.reason, executions: claim.state.executions });
   if (!claim.proceed) {
     record(root, { status: "skipped", reason: claim.reason, session: input.session_id });
     silent();
@@ -89,6 +92,7 @@ const main = async () => {
 
   // 2. config: sem config, a ferramenta não age neste repo
   const config = loadConfig(root);
+  trace(root, "config", { found: !!config, rules: config?.rules ?? null });
   if (!config) {
     record(root, { status: "skipped", reason: "no_config", session: input.session_id });
     silent();
@@ -99,9 +103,11 @@ const main = async () => {
   try {
     prep = prepare(root, config);
   } catch (e) {
+    trace(root, "prepare", { error: String(e.message ?? e).slice(0, 200) });
     record(root, { status: "failed", error: String(e.message ?? e).slice(0, 300), session: input.session_id });
     silent(); // fail-open
   }
+  trace(root, "gate", { result: prep.gate, reason: prep.reason, ...prep.stats });
 
   if (prep.gate !== "passed") {
     record(root, {
@@ -116,6 +122,11 @@ const main = async () => {
 
   // 4. marca ANTES de bloquear: se o agente parar de novo, o guard silencia
   markReviewed(input.session_id);
+  trace(root, "prepare", {
+    context_file: prep.context_file,
+    deterministic_findings: prep.deterministic_findings,
+    passes: prep.passes,
+  });
   record(root, {
     status: "completed",
     gate: prep.gate,
@@ -127,7 +138,9 @@ const main = async () => {
     session: input.session_id,
   });
 
-  block(instruction(prep));
+  const reason = instruction(prep);
+  trace(root, "block", { chars: reason.length });
+  block(reason);
 };
 
 main().catch(() => silent());

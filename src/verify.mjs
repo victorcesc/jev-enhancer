@@ -16,6 +16,7 @@
 // a ausência de uma dependência externa não pode travar o fluxo do agente.
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { missingEvidence, retrieve } from "./retrieve.mjs";
 
 export const findKey = (start) => {
   const env = (process.env.TYPESAFE_AI_API_KEY ?? "").trim();
@@ -67,6 +68,69 @@ const mockVerify = (findings) => {
  *     mode: "mock" | "jev", usage }
  * verdict ∈ confirmed | needs_context | rejected
  */
+/**
+ * Segunda passada determinística para os `needs_context`.
+ *
+ * O Jev responde needs_context quando o achado cita um arquivo que não está no
+ * diff. Essa evidência é buscável no disco — não precisa de LLM. Lemos os
+ * arquivos faltantes e perguntamos de novo, só sobre os achados pendentes.
+ */
+const resolveNeedsContext = async (key, verified, findings, diff, root) => {
+  const pending = verified
+    .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f.verdict === "needs_context");
+  if (pending.length === 0) return { verified, usage: {}, retrieved: [] };
+
+  const wanted = [...new Set(pending.flatMap(({ f }) => missingEvidence(f, diff)))];
+  const evidence = retrieve(root, wanted);
+  const names = Object.keys(evidence);
+  if (names.length === 0) return { verified, usage: {}, retrieved: [] };
+
+  const items = {};
+  const questions = {};
+  pending.forEach(({ f, i }) => {
+    const id = `f${i}`;
+    items[id] = { file: f.file, symbol: f.symbol, issue: f.issue };
+    questions[`${id}_valid`] = {
+      type: "noul",
+      instructions: `Com o diff E os arquivos adicionais em state.evidence, o achado state.findings.${id} descreve um defeito REAL?`,
+    };
+    questions[`${id}_ev`] = {
+      type: "noul",
+      instructions: `Agora o contexto em state é suficiente para julgar state.findings.${id} com segurança?`,
+    };
+  });
+
+  let json;
+  try {
+    const res = await fetch("https://api.typesafe.ai/v1/systemone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: "jev-latest", state: { diff, evidence, findings: items }, questions }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok) return { verified, usage: {}, retrieved: names };
+    json = await res.json();
+  } catch {
+    return { verified, usage: {}, retrieved: names };
+  }
+
+  const out = [...verified];
+  for (const { i } of pending) {
+    const id = `f${i}`;
+    const valid = json.answers?.[`${id}_valid`]?.noul ?? 0;
+    const evid = json.answers?.[`${id}_ev`]?.noul ?? 0;
+    if (evid < EVIDENCE_MIN) continue; // segue needs_context, agora com razão
+    out[i] = {
+      ...out[i],
+      jev: { ...out[i].jev, valid: Number(valid.toFixed(2)), evidence_sufficient: Number(evid.toFixed(2)) },
+      verdict: valid >= VALID_MIN ? "confirmed" : "rejected",
+      resolved_by: "retrieval",
+    };
+  }
+  return { verified: out, usage: json.usage ?? {}, retrieved: names };
+};
+
 export const verifyFindings = async (findings, cwd, diff = "") => {
   if (findings.length === 0) return { findings: [], mode: "jev", usage: {} };
   const key = findKey(cwd ?? process.cwd());
@@ -128,8 +192,20 @@ export const verifyFindings = async (findings, cwd, diff = "") => {
       verdict,
     };
   });
-  out.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
-  return { findings: out, mode: "jev", usage: json.usage ?? {} };
+  // Exp. 5 — resolve os needs_context com busca determinística, sem LLM.
+  const second = await resolveNeedsContext(key, out, findings, diff, cwd ?? process.cwd());
+  const final = second.verified;
+  final.sort((a, b) => b.jev.severity_score - a.jev.severity_score);
+  return {
+    findings: final,
+    mode: "jev",
+    usage: json.usage ?? {},
+    retrieval: {
+      files: second.retrieved,
+      jev_tokens: second.usage?.input_tokens ?? 0,
+      resolved: final.filter((f) => f.resolved_by === "retrieval").length,
+    },
+  };
 };
 
 /** Achados que o usuário deve ver: confirmados + os que pedem mais contexto. */

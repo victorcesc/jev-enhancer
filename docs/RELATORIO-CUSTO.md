@@ -103,3 +103,82 @@ determinístico). É o Scout, redesenhado com esse propósito.
 - "10 confirmados" é o veredito do Jev, não ground truth auditada.
 - O overhead de 6,3% é da sessão principal; sobre o custo total da sessão
   (implementação + review), o review é ~26%.
+
+---
+
+# Experimento 5 — Verificação iterativa sem LLM
+
+**Hipótese:** boa parte dos `needs_context` pode ser resolvida com busca
+determinística, sem acionar a LLM.
+
+**Implementação:** quando o Jev devolve `needs_context`, extraímos os arquivos
+citados no texto do achado, verificamos quais NÃO estão no diff, lemos esses
+arquivos do disco (com casamento por sufixo, porque o achado costuma citar
+`internal/middleware/routes.go` enquanto o arquivo real está sob
+`packages/api-go/`) e perguntamos ao Jev de novo, só sobre os pendentes.
+
+## Funcionou — e foi decisivo
+
+Caso do prefixo de rota, que na primeira passada era `needs_context`
+(evidência 0,34):
+
+1. extraiu `internal/middleware/routes.go` do texto do achado;
+2. achou o arquivo por sufixo e leu (848 bytes);
+3. o arquivo **contém** `"/api/v1/customers/"` — a rota ESTÁ registrada;
+4. Jev rejeitou o achado. **Rejeição correta.**
+
+Custo: ~16k tokens de Jev, 1,2 s. Nenhuma chamada de LLM.
+
+## Mas revelou um risco real: rejeição falsa
+
+No mesmo teste, o achado do `numericFloat` (defeito verdadeiro — o código de
+fato engole o erro e devolve 0) foi **rejeitado**. Investigando: o achado
+citava `internal/fiado/fiado.go`, mas nesta implementação o código está em
+`pending.go`. O arquivo citado não existia, então a premissa parecia falsa.
+
+Com o caminho corrigido, o mesmo achado voltou a **confirmed (v=0,77,
+e=0,79)**.
+
+**A lição:** o retrieval aumenta a DECISIVIDADE, e isso corta para os dois
+lados. Ele converte `needs_context` em `confirmed`/`rejected` — e uma rejeição
+errada é pior que um `needs_context`, porque o achado some em vez de ir para
+revisão humana.
+
+Mitigação recomendada antes de ligar por padrão: quando o arquivo citado não
+for encontrado, **não rejeitar** — manter `needs_context` com o motivo
+"caminho citado não existe", que é informação útil por si só (o revisor errou a
+localização, ou o código mudou).
+
+## Estado
+
+Implementado e testado, **mas não recomendado como padrão ainda** por causa do
+risco de rejeição falsa. A mitigação acima é uma mudança pequena e deveria vir
+antes de qualquer uso automático.
+
+---
+
+# Experimentos restantes — avaliação sem executar
+
+Com o que os dados já mostram, dois deles mudaram de prioridade:
+
+**Jev Scout (Exp. 1)** — redesenhado: em vez de filtrar o que a LLM analisa,
+**entregar pronto o que o subagente iria investigar**. Ele gastou turnos com
+`go build`, `cat`, `grep` e `ls`. Um pre-fetch determinístico desses fatos
+(arquivos gerados existem? build passa? símbolo existe?) encurtaria a
+investigação sem tirar informação. É o que tem maior potencial agora, porque
+ataca os 82% do custo sem cortar qualidade.
+
+**Context Routing (Exp. 2)** — mesma lógica, mas com um alerta medido: na
+v2.5, estreitar o contexto **aumentou a ancoragem** (cobertura caiu de 9/10
+para 8/10 enquanto o achado crítico melhorava). Estreitar demais faz o
+subagente sair investigando de novo, que é justamente o custo que queremos
+evitar.
+
+**Atomic Questions (Exp. 3)** — o risco de recall subiu na minha avaliação.
+Nesta última rodada o achado de maior severidade foi *"sqlc não foi regenerado:
+não existe internal/db/fiado.sql.go"*. Nenhuma lista de perguntas fixas teria
+essa pergunta. Vale como **complemento** da review ampla, nunca como
+substituto.
+
+**Adaptive Review (Exp. 4)** — depende de calibração e hoje temos n=1 por
+protocolo. Prematuro.

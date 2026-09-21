@@ -114,3 +114,60 @@ código que não compila**, é uma troca favorável em quase qualquer cenário �
 principalmente porque o bug mais grave (build quebrado) seria descoberto de
 qualquer forma, só que mais tarde e mais caro: no CI, no PR, ou pelo
 desenvolvedor abrindo o projeto.
+
+---
+
+# Ressalva de validade: o ambiente de teste é mais fraco que o real
+
+| | pdv (ambiente do teste) | new-space-game (real) |
+| --- | --- | --- |
+| CI | **nenhum** | `e2e.yml`, `quality.yml` |
+| git hooks | **nenhum** | `pre-push` |
+| gates locais | **nenhum** | 7, incl. `pr_rules.sh` |
+
+Isso **infla a dramaticidade do achado #1**. Eu escrevi que "nenhum linter
+pegaria, nenhum teste pegaria". Está errado: **qualquer gate de build pega um
+build quebrado**. No `new-space-game`, o `pre-push` ou o `quality.yml`
+barrariam antes do PR. O que o teste mostrou é que *num repo sem gate* passa —
+não que seja indetectável.
+
+## Quais dos 10 um gate automatizado pegaria
+
+| # | achado | gate pega? |
+| --- | --- | --- |
+| 1 | build quebrado (sqlc não regenerado) | **SIM** — `go build` |
+| 2 | subquery de payments sem predicado | não — compila e passa |
+| 3 | teste cria `otherUser` e não exercita isolamento | não |
+| 4 | erro de banco sem `%w` e sem log | não |
+| 5 | ramo de fallback nunca exercitado | não (cobertura talvez sinalize) |
+| 6 | `numericFloat` engole erro | não |
+| 7 | validade do `timestamptz` descartada | não |
+| 8 | contrato de erro divergente | não |
+| 9 | teste de contrato não desce em `pagination` | não |
+| 10 | duas queries fora de transação | não |
+
+**1 de 10.** Os outros 9 são exatamente a classe de julgamento que nenhum
+linter, gate ou teste alcança — que é a tese do projeto desde o início.
+
+## O que isso muda e o que não muda
+
+**Muda:** o exemplo mais vistoso (código que não compila) não é representativo
+do valor da ferramenta num repo maduro como o seu. Lá, ele seria pego a jusante
+— mais tarde e mais caro, mas seria pego.
+
+**Não muda:** os 9 restantes continuam reais, auditados, e invisíveis para
+qualquer verificação automatizada. E o agente não encontrou nenhum deles
+sozinho.
+
+**Reforça a proposta correta:** o jev-enhancer não substitui gates — ele cobre
+o que gates não alcançam. No `new-space-game` ele entraria *ao lado* do
+`prrules`, não no lugar dele: o `prrules` cuida do mecânico, o review cuida do
+julgamento.
+
+## Limitação do teste que permanece
+
+Não sabemos como o agente se comportaria num repo **com** gate ativo. É
+plausível que a existência de um `pre-push` o levasse a rodar o build por
+conta própria, reduzindo achados triviais e deixando só os de julgamento — que
+seria, aliás, o cenário ideal. Medir isso exigiria repetir o teste num repo
+com gates, e é o próximo passo natural de validação.

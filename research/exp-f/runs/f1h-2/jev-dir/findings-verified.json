@@ -1,0 +1,106 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 4,
+    "needs_context": 2
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/db/querier.go",
+      "line": 11,
+      "symbol": "Querier",
+      "issue": "Missing methods from fiado.sql queries. The Querier interface does not include GetCustomerByUserIDAndID, ListPendingFiadoSalesByCustomer, or SummarizePendingFiadoSalesByCustomer. Code in pending.go and main.go references these methods, but they don't exist in the generated interface. Build will fail.",
+      "kind": "bug",
+      "severity": "high",
+      "from_candidate": "db-1",
+      "jev": {
+        "valid": 0.92,
+        "severity_score": 2.98,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler packages/api-go/internal/db/querier.go",
+      "resolved_by": "retrieval"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "Discarded validity flag from timestamptzTime. If row.SaleDate is invalid (NULL in DB), the code silently uses time.Time zero value. Validity information is lost.",
+      "kind": "bug",
+      "severity": "med",
+      "from_candidate": "errors-7",
+      "jev": {
+        "valid": 0.58,
+        "severity_score": 1.17,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.58)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 115,
+      "symbol": "TestListPending_success",
+      "issue": "Test asserts 2 sales exist (len(out.Data) != 2) but only inspects the first one (out.Data[0]). The second sale should be verified for correctness.",
+      "kind": "test",
+      "severity": "med",
+      "from_candidate": "tests-60",
+      "jev": {
+        "valid": 0.57,
+        "severity_score": 0.77,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.57)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 42,
+      "symbol": "FailureResponse",
+      "issue": "FailureResponse is defined in both fiado/types.go and sync/types.go. The sync version has an additional 'Error' field. Duplicated type definitions should be consolidated.",
+      "kind": "rule",
+      "severity": "low",
+      "from_candidate": "behaviour-18",
+      "jev": {
+        "valid": 0.43,
+        "severity_score": 0.58,
+        "evidence_sufficient": 0.62
+      },
+      "verdict": "needs_context",
+      "reason": "li sync/types.go e continua inconclusivo"
+    },
+    {
+      "file": "packages/api-go/internal/sync/pgconv.go",
+      "line": 0,
+      "symbol": "numericFloat",
+      "issue": "Function numericFloat is defined in 3 different places: fiado_integration_test.go:19, pending.go:94, and sync/pgconv.go:11. Code duplication violates DRY principle. Should share a common utility or move to a shared package.",
+      "kind": "rule",
+      "severity": "low",
+      "from_candidate": "behaviour-14",
+      "jev": {
+        "valid": 0.48,
+        "severity_score": 0.36,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "needs_context",
+      "reason": "li packages/api-go/internal/sync/pgconv.go, sync/pgconv.go e continua inconclusivo"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Variable productID is seeded but never used. The INSERT query creates a product but it's not referenced in any test assertions or subsequent queries.",
+      "kind": "test",
+      "severity": "low",
+      "from_candidate": "tests-61",
+      "jev": {
+        "valid": 0.6,
+        "severity_score": 0.17,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.60)"
+    }
+  ]
+}

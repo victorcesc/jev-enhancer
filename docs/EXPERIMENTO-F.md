@@ -81,6 +81,53 @@ diff.
 O que não se confirmou foi a ponte econômica entre as duas coisas: saber onde
 olhar não fez a LLM olhar menos.
 
+## O mapa vale mais para o modelo fraco do que para o forte
+
+O braço F1 foi repetido com Haiku 4.5 (n=3), contra o controle do experimento
+E (Haiku, mesmo protocolo, sem mapa).
+
+| | n | recall | severidade | custo |
+| --- | --- | --- | --- | --- |
+| Haiku sem mapa | 3 | 14% (11–15%) | 18% (14–22%) | $0,36 |
+| **Haiku + mapa** | 3 | **23% (19–30%)** | 25% (14–39%) | **$0,39** |
+| Opus sem mapa | 3 | 40% (33–44%) | 49% (42–56%) | $2,17 |
+| Opus + mapa | 3 | 43% (37–48%) | 50% (44–56%) | $2,99 |
+
+Ganho relativo do mesmo mapa:
+
+```
+Haiku   recall  +69%   severidade  +42%   custo   +8%
+Opus    recall   +9%   severidade   +2%   custo  +38%
+```
+
+**No Haiku o ganho de recall é conclusivo**: as faixas não se tocam (11–15%
+contra 19–30%), e custa 8%. No Opus não é: as faixas se sobrepõem quase
+inteiramente e custa 38%.
+
+A leitura que isso impõe: para o modelo caro o mapa é **redundante** — ele
+acharia aquilo sozinho, e o mapa só adiciona contexto a ser relido. Para o
+modelo barato é **capacidade emprestada** — ele não sabia onde olhar.
+
+### Mas não fecha a distância, e a severidade não acompanha
+
+Haiku com mapa chega a 23% contra 40% do Opus sem mapa. Menos da metade.
+
+E o ganho de severidade **não é conclusivo** (faixas 14–22% contra 14–39%): os
+achados que o mapa acrescenta ao Haiku são majoritariamente `low`. Ele passa a
+achar mais coisa, não coisa mais grave.
+
+### Ancoragem total
+
+```
+Haiku:  26 achados do mapa,  0 independentes  ->  0% de serendipidade
+Opus:   32 achados do mapa,  4 independentes  -> 11%
+```
+
+O modelo fraco **depende** do mapa; o forte o complementa. Isso torna a
+ressalva do congelamento mais séria para o caso que mais se beneficia: num
+snapshot que o gerador nunca viu, a cobertura cai e o Haiku não tem como
+compensar sozinho.
+
 ## Ressalvas
 
 - **n=3 por braço**, um snapshot, um modelo.

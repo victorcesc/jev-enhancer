@@ -1,0 +1,5 @@
+{"at":"2026-09-21T19:21:04.085Z","status":"completed","stage":"review","gate":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"trigger":"agent"}
+{"at":"2026-09-21T19:21:42.694Z","status":"completed","stage":"fallback","gate":"passed","reason":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"session":"b145d8f6-d946-49c0-a88f-61394a713a97"}
+{"at":"2026-09-21T19:21:44.984Z","status":"skipped","reason":"already_reviewed","session":"b145d8f6-d946-49c0-a88f-61394a713a97","stage":"fallback"}
+{"at":"2026-09-21T19:23:42.877Z","status":"completed","stage":"verify","mode":"jev","trigger":"hook","findings":13,"verified":13,"verdicts":{"confirmed":12,"needs_context":1},"jev_tokens":21144,"ms":2507}
+{"at":"2026-09-21T19:24:01.444Z","status":"skipped","reason":"already_reviewed","session":"b145d8f6-d946-49c0-a88f-61394a713a97","stage":"fallback"}

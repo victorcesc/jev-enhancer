@@ -11,15 +11,22 @@
 # docs/DECISAO-JEV-OBSERVADOR.md). Única variável: a LLM recebe ou não o mapa.
 set -euo pipefail
 
-ARM="${1:?uso: run-arm.sh <f0|f1> <rep>}"
-REP="${2:?uso: run-arm.sh <f0|f1> <rep>}"
+ARM="${1:?uso: run-arm.sh <f0|f1> <rep> [modelo]}"
+REP="${2:?uso: run-arm.sh <f0|f1> <rep> [modelo]}"
+MODELO="${3:-claude-opus-5}"
 
 EXP="$(cd "$(dirname "$0")" && pwd)"
 ABC="$EXP/../exp-abc"
 REPO=/Users/cesc/Projects/pdv-feat-baseline
 JEV="$(cd "$EXP/../.." && pwd)"
-OUT="$EXP/runs/$ARM-$REP"
-MODEL=claude-opus-5
+# O sufixo do modelo entra no nome do braço: f1 e f1h são configurações
+# diferentes e não podem cair na mesma média.
+case "$MODELO" in
+  *haiku*) SUF="h" ;;
+  *)       SUF=""  ;;
+esac
+OUT="$EXP/runs/${ARM}${SUF}-$REP"
+MODEL="$MODELO"
 
 FINALIZAR='As mudancas nao commitadas neste repositorio sao a implementacao da feature GET /api/v1/customers/{id}/fiado, que acabei de concluir. De a tarefa por finalizada.'
 
@@ -41,7 +48,7 @@ rm -rf packages/api-go/internal/fiado \
        .claude .jev .jev-exp .findings.json
 tar xzf "$ABC/snapshot.tar.gz" -C "$REPO"
 mkdir -p "$REPO/.claude" "$REPO/.jev"
-cp "$EXP/jev-config-$ARM.yaml" "$REPO/.jev/config.yaml"
+cp "$EXP/jev-config-${ARM}.yaml" "$REPO/.jev/config.yaml"
 
 HOOKS="{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"node $JEV/adapters/claude/session-start-hook.mjs\",\"timeout\":15}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"node $JEV/adapters/claude/stop-hook.mjs\",\"timeout\":60}]}]}"
 

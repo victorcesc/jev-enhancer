@@ -47,14 +47,20 @@ const analyzeTranscript = (file) => {
   const out = {
     turns_before: 0, turns_after: 0,
     tokens_before: 0, tokens_after: 0,
+    cache_read_after: 0, output_after: 0,
     tools_before: {}, tools_after: {},
     block_found: false, block_index: null,
     subagents: 0, jev_verify_calls: 0,
   };
+  // O transcript registra a MESMA mensagem mais de uma vez (streaming +
+  // final). Somar todas dobra os números — foi o que aconteceu no primeiro
+  // relatório. Contamos cada id de mensagem uma única vez.
+  const counted = new Set();
   let after = false;
   lines.forEach((e, i) => {
-    const text = JSON.stringify(e);
-    if (!after && text.includes("Review automático do jev-enhancer")) {
+    // json.dumps escapa acentos; comparar no objeto bruto evita o falso negativo
+    const text = JSON.stringify(e, null, 0);
+    if (!after && (text.includes("jev-enhancer") && text.includes("Review"))) {
       after = true;
       out.block_found = true;
       out.block_index = i;
@@ -64,8 +70,21 @@ const analyzeTranscript = (file) => {
     const bucketTurns = after ? "turns_after" : "turns_before";
     const bucketTokens = after ? "tokens_after" : "tokens_before";
     const bucketTools = after ? "tools_after" : "tools_before";
-    if (msg.role === "assistant") out[bucketTurns] += 1;
-    if (msg.usage) out[bucketTokens] += sumTokens(msg.usage);
+    // dedup: mensagem já contabilizada não soma turno, token nem ferramenta
+    const id = msg.id ?? `${e.uuid ?? i}`;
+    if (counted.has(id)) return;
+    counted.add(id);
+
+    if (msg.role === "assistant") {
+      out[bucketTurns] += 1;
+      if (msg.usage) {
+        out[bucketTokens] += sumTokens(msg.usage);
+        if (after) {
+          out.cache_read_after += msg.usage.cache_read_input_tokens ?? 0;
+          out.output_after += msg.usage.output_tokens ?? 0;
+        }
+      }
+    }
     for (const c of Array.isArray(msg.content) ? msg.content : []) {
       if (c?.type !== "tool_use") continue;
       const name = c.name ?? "?";
@@ -184,6 +203,15 @@ export const renderInspect = (report) => {
     const pct = t.tokens_before > 0 ? ((t.tokens_after / t.tokens_before) * 100).toFixed(1) : "?";
     L.push(`  custo marginal do review: ${pct}% da implementação`);
     L.push(`  ferramentas no review: ${JSON.stringify(t.tools_after)}`);
+
+    // A anatomia importa mais que o total: quase tudo é contexto re-cobrado a
+    // cada turno, não trabalho. Reduzir TURNOS vale mais que reduzir análise.
+    if (t.turns_after > 0) {
+      const share = t.tokens_after > 0 ? ((t.cache_read_after / t.tokens_after) * 100).toFixed(1) : "0";
+      const perTurn = Math.round(t.cache_read_after / t.turns_after);
+      L.push(`  → contexto re-cobrado: ${t.cache_read_after.toLocaleString()} (${share}%) · trabalho real (output): ${t.output_after.toLocaleString()}`);
+      L.push(`  → ${t.turns_after} turnos × ${perTurn.toLocaleString()} de contexto; com 2 turnos seria ${(2 * perTurn).toLocaleString()}`);
+    }
   }
 
   L.push("", "=== 5. respeitou o read-only? ===");

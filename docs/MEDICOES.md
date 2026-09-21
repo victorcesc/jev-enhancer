@@ -108,3 +108,68 @@ cada 2-3 reviews já paga. E no teste retroativo sobre bugs reais do
   configurado, ela entra sem custo de tokens.
 - Medir o review em sessão isolada versus dentro da sessão, para quantificar
   exatamente o preço de rodar "dentro".
+
+---
+
+# Diagnóstico: por que o review integrado custa ~15× o isolado
+
+Análise turno a turno da fase de review (rodada 2), **deduplicada** — o
+transcript registra cada mensagem mais de uma vez, e somar todas dobra os
+números (erro que inflou o primeiro relatório em ~2×).
+
+## A anatomia
+
+| componente | tokens | share |
+| --- | --- | --- |
+| contexto re-cobrado (cache_read) | 1.208.910 | **98,3%** |
+| cache novo | 14.406 | 1,2% |
+| **trabalho real (output)** | **5.944** | **0,5%** |
+| total da fase de review | 1.229.260 | |
+
+**9 turnos × 134.323 de contexto acumulado = 1,2 M.**
+
+## A conclusão
+
+O trabalho de review é praticamente grátis: 5.944 tokens de saída. Todo o
+resto é o preço de existir dentro de uma sessão grande — cada turno de
+orquestração re-lê os ~134 k de contexto acumulado.
+
+```
+custo ≈ turnos_na_sessão_principal × contexto_acumulado
+```
+
+Isso explica a diferença medida:
+- **isolado**: 1-2 turnos × contexto pequeno ≈ 120 k
+- **integrado**: 9 turnos × 134 k ≈ 1,2 M
+
+Não é a análise que custa. É a orquestração.
+
+## O alvo
+
+Reduzir TURNOS na sessão principal, não reduzir análise:
+
+| turnos | custo projetado | redução |
+| --- | --- | --- |
+| 9 (hoje) | 1.208.910 | — |
+| 2 (uma ida e volta) | 268.646 | **78%** |
+
+2 turnos é o piso teórico: o agente chama a ferramenta (1) e recebe o
+resultado (1). Tudo além disso é orquestração evitável.
+
+Isso valida a hipótese do worker único: o ganho não vem de juntar os dois
+passes num agente só — vem de o agente principal não orquestrar etapa por
+etapa. Os passes podem continuar dois, desde que aconteçam **atrás de uma
+única chamada**.
+
+## Correção do relatório anterior
+
+Os números publicados antes estavam inflados ~2× pela dupla contagem:
+
+| | antes (errado) | correto |
+| --- | --- | --- |
+| implementação | 11,0 M / 125 turnos | 5,7 M / 62 turnos |
+| review | 2,3 M / 17 turnos | 1,23 M / 9 turnos |
+| % do review | 21,0% | 21,6% |
+
+A proporção se manteve (o erro afetava os dois lados igualmente), mas os
+absolutos não. O `inspect` agora deduplica por id de mensagem.

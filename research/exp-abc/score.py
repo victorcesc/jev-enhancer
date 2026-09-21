@@ -244,6 +244,46 @@ def matrix():
     print(row)
 
 
+def summary():
+    """Agregado por braço, com faixa — média sozinha esconde a variância.
+
+    Com n=2-3 a faixa importa mais que a média: se o pior do braço melhor
+    empata com o melhor do braço pior, a diferença não é conclusiva.
+    """
+    runs = sorted(p for p in (HERE / "runs").iterdir() if p.is_dir())
+    data = {}
+    for r in runs:
+        s = score(r)
+        if not s:
+            continue
+        u = usage(r)
+        data.setdefault(s["arm"], []).append((s, u, seconds(r)))
+    print(f"\n{'braço':7}{'n':>3}{'achados':>20}{'recall':>20}{'tokens':>26}{'tempo':>18}")
+    print("-" * 94)
+    for arm in sorted(data):
+        rs = data[arm]
+        n = len(rs)
+        ach = [s["n_findings"] for s, _, _ in rs]
+        rec = [s["recall"] for s, _, _ in rs]
+        tok = [u.get("tokens", 0) for _, u, _ in rs]
+        sec = [t or 0 for _, _, t in rs]
+        f = lambda v, fmt: f"{sum(v)/len(v):{fmt}} ({min(v):{fmt}}–{max(v):{fmt}})"
+        print(f"{arm.upper():7}{n:>3}{f(ach,'.1f'):>20}{f(rec,'.0%'):>20}"
+              f"{f(tok,',.0f'):>26}{f(sec,'.0f'):>18}")
+    print("-" * 94)
+    arms = sorted(data)
+    if len(arms) > 1:
+        piores = {a: min(s["recall"] for s, _, _ in data[a]) for a in arms}
+        melhores = {a: max(s["recall"] for s, _, _ in data[a]) for a in arms}
+        top = max(arms, key=lambda a: sum(s["recall"] for s, _, _ in data[a]) / len(data[a]))
+        conclusivo = all(piores[top] > melhores[a] for a in arms if a != top)
+        print(f"braço com maior recall médio: {top.upper()}")
+        print("CONCLUSIVO: o pior caso dele supera o melhor caso dos outros."
+              if conclusivo else
+              "NÃO CONCLUSIVO: as faixas se sobrepõem — a diferença entre braços é menor\n"
+              "que a variância dentro de cada braço. Mais repetições ou aceitar o empate.")
+
+
 def saturation():
     """Quantos defeitos INÉDITOS cada execução acrescentou, em ordem cronológica.
 
@@ -381,6 +421,8 @@ if __name__ == "__main__":
         verify_effect()
     elif args[0] == "--saturation":
         saturation()
+    elif args[0] == "--summary":
+        summary()
     else:
         for a in args:
             report(Path(a) if Path(a).is_absolute() else HERE / a)

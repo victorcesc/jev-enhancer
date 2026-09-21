@@ -1,0 +1,176 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 12
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "issue": "O codigo sqlc de query/fiado.sql nao foi regenerado/commitado: nao existe internal/db/fiado.sql.go. 'go build ./...' falha com 'undefined: db.GetCustomerByUserIDAndIDParams', 'db.ListPendingFiadoSalesByCustomerParams/Row', 'db.SummarizePendingFiadoSalesByCustomerParams/Row', e 'go vet ./internal/db' falha com 'queries.GetCustomerByUserIDAndID undefined'. cmd/server nao compila e nenhum teste novo (fiado, handler, db) roda. Falta 'make -C packages/api-go sqlc', invariante do AGENTS.md.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.43
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "'/api/v1/customers/' isenta toda a subarvore da checagem de X-API-Key bastando existir um header 'Authorization: Bearer ' qualquer (nem precisa ser token valido). Hoje so /{id}/fiado esta sob apimw.Bearer, mas qualquer rota futura montada sob /api/v1/customers/ fora desse grupo fica acessivel sem API key. O path '/api/v1/customers' sem barra final nao casa o prefixo, divergindo do resto da subarvore.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 2.57,
+        "evidence_sufficient": 0.53
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 30,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O LEFT JOIN agrega a tabela payments inteira (SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id) sem qualquer filtro por sale/user; a condicao de join p.sale_id = s.id nao e empurrada para dentro da subquery agregada. Cada GET /api/v1/customers/{id}/fiado faz duas varreduras completas de payments de todos os tenants (listagem + summary). Nos testes, com poucas linhas, isso e invisivel.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.9,
+        "severity_score": 2.27,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "O booleano de validade de timestamptzTime e descartado ('saleDate, _ :='): um SaleDate NULL/invalido vira '0001-01-01T00:00:00Z' no JSON em vez de erro ou null, e o segundo retorno da funcao e codigo morto. Mesma classe em numericFloat (linha 94), que converte erro de Float64Value ou NUMERIC NULL em 0.00 silencioso, reportando saldo devedor zerado ao cliente. Nenhum dos dois caminhos de erro tem teste.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.91,
+        "severity_score": 2.11,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "ListPending",
+      "issue": "Summary (COUNT/SUM) e a pagina de linhas sao duas queries independentes fora de transacao. Se um pagamento quitar uma venda entre as duas chamadas, pagination.total/total_pages e total_devido ficam inconsistentes com data (ex.: total=5 com pagina vazia, ou total_devido menor que a soma dos saldos listados). Sem snapshot consistente e sem cobertura.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 2.06,
+        "evidence_sufficient": 0.56
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O comentario 'Same customer id must not match another user's sales' anuncia isolamento multi-tenant, mas o teste nunca semeia venda fiado em aberto para otherUserID/otherCustomerID nem chama ListPendingFiadoSalesByCustomer com UserID: otherUserID e CustomerID: customerID. Remover 'AND s.user_id = sqlc.arg(user_id)' das duas queries de fiado deixaria todos os testes (integracao, unit com stub, handler) verdes; o unico isolamento coberto e o de GetCustomerByUserIDAndID.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.72,
+        "severity_score": 1.82,
+        "evidence_sufficient": 0.64
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "issue": "Todo erro do store vira apperror.New generico: o erro original nao e envolvido com %w nem logado, e writeFiadoFailure no handler tambem nao loga. Uma queda do Postgres ou erro de SQL produz 500 opaco sem rastro em log e sem causa inspecionavel, contrariando os invariantes do AGENTS.md ('Return errors from lower layers and log at process or handler boundaries' e 'Wrap inspectable errors with %w'); o middleware Bearer, por contraste, loga com LoggerFromContext.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.91,
+        "severity_score": 1.78,
+        "evidence_sufficient": 0.67
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 202,
+      "symbol": "TestCustomerFiado_requiresBearerToken",
+      "issue": "Os erros de autenticacao vem do apimw.Bearer via apperror, que escreve {error, code}, enquanto o handler fiado escreve {success, message, code} (fiado.FailureResponse). O contrato de erro da mesma rota muda conforme a falha seja 401 do middleware ou 4xx/5xx do handler, e o teste so confere rec.Code, nunca o corpo, deixando a divergencia invisivel para o cliente desktop.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.79,
+        "severity_score": 1.72,
+        "evidence_sufficient": 0.42
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 124,
+      "symbol": "TestCustomerFiado_responseKeys",
+      "issue": "O teste que trava o contrato JSON verifica as chaves de topo e as de data[0], mas nunca desce em pagination: page, limit, total e total_pages poderiam ser renomeadas (ex.: totalPages) sem quebrar teste algum. Alem disso items[0] e indexado sem checar len(items) > 0 e rec.Code nao e verificado antes do parse, entao um corpo de erro vira panic/falha confusa.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.8,
+        "severity_score": 1.25,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 64,
+      "symbol": "writeFiadoFailure",
+      "issue": "O ramo de fallback para erro que nao e *apperror.AppError (500 com corpo INTERNAL_ERROR) nunca e exercitado: TestCustomerFiado_serviceFailureIs500 injeta justamente um apperror.AppError, caindo no caminho errors.As == true. Como PendingFiadoLister aceita qualquer error, esse ramo e alcancavel em producao e esta sem cobertura.",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.69,
+        "severity_score": 1.19,
+        "evidence_sufficient": 0.71
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 195,
+      "symbol": "TestCustomerFiado_invalidParams",
+      "issue": "O teste de parametros invalidos so checa status 400 e 'lister.gotCustomerID != 0' (que tambem valeria 0 se o handler chamasse o servico com id zero). O corpo do erro nunca e comparado: success=false, code VALIDATION_ERROR e message nao sao assertados, entao uma regressao que mudasse o shape/codigo do erro passaria verde.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.75,
+        "severity_score": 1.12,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O seed de products/productID e criado mas nunca usado: nenhum sale_item referencia o produto e productID nao aparece em nenhuma assercao. Setup morto que sugere cobertura de itens de venda que nao existe.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.65,
+        "severity_score": 0.21,
+        "evidence_sufficient": 0.79
+      },
+      "verdict": "confirmed"
+    }
+  ]
+}

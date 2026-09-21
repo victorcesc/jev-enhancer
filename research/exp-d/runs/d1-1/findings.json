@@ -1,0 +1,60 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "O código sqlc de query/fiado.sql nunca foi gerado: internal/db não contém GetCustomerByUserIDAndIDParams, ListPendingFiadoSalesByCustomerParams/Row nem SummarizePendingFiadoSalesByCustomerParams/Row (git status não mostra nenhuma alteração em internal/db). `go build ./...` em packages/api-go falha com 8 erros `undefined: db.*` e `go vet` falha também em internal/db/fiado_integration_test.go:107. Toda a API deixou de compilar. É preciso rodar `make -C packages/api-go sqlc` — e revalidar as suposições de tipo que o código faz sobre o resultado (GetCustomerByUserIDAndID retornando db.Customer e RowLimit/RowOffset como int32), pois não existe nenhuma outra query no repositório com LIMIT/OFFSET parametrizado para servir de precedente."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "A subquery de pagamentos (`SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id`) não é correlacionada nem filtrada por user_id/customer_id. Como é um LEFT JOIN com GROUP BY, o Postgres não consegue empurrar os predicados externos (s.user_id / s.customer_id) para dentro dela, então cada requisição agrega a tabela `payments` inteira — de todos os tenants — e isso acontece duas vezes por request (ListPendingFiadoSalesByCustomer + SummarizePendingFiadoSalesByCustomer). Restringir os pagamentos às vendas do cliente (subquery correlacionada ou join filtrado por sales) evita a varredura completa."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "severity": "med",
+      "issue": "O resumo (SummarizePendingFiadoSalesByCustomer) e a página de linhas (ListPendingFiadoSalesByCustomer) são lidos em duas queries separadas, fora de uma transação/snapshot comum. Um pagamento que quite uma venda entre as duas chamadas produz uma resposta inconsistente: pagination.total/total_pages e total_devido contam a venda, mas `data` não a traz (ou vice-versa), e a soma dos `saldo` da página não bate com `total_devido`. Ler as duas dentro de uma mesma transação (ou derivar o resumo da mesma leitura) elimina a janela."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "severity": "low",
+      "issue": "internalError() descarta completamente o erro original do banco: não há wrap com %w nem log em nenhum ponto do caminho (o handler writeFiadoFailure também não loga). Qualquer falha de conexão/query vira um 500 genérico sem rastro, impossível de diagnosticar em produção. Contraria AGENTS.md (\"Wrap inspectable errors with %w\" e \"log at process or handler boundaries\"). Observação: internal/sync/initial.go tem o mesmo problema, então é convenção pré-existente sendo propagada."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "`saleDate, _ := timestamptzTime(row.SaleDate)` descarta o booleano de validade que a função existe para devolver — é o único chamador, então o segundo retorno é código morto. Se sale_date vier NULL/inválido, o JSON serializa `\"data\": \"0001-01-01T00:00:00Z\"` silenciosamente em vez de sinalizar ausência. Hoje é inalcançável (sales.sale_date é NOT NULL em db/schema.sql), mas a função sugere um tratamento que não existe."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "numericFloat é cópia literal de internal/sync/pgconv.go:11 (mesmo corpo, mesmo tratamento de erro). Vale extrair um helper compartilhado (ex.: um pacote pgconv interno) em vez de duplicar a conversão pgtype.Numeric -> float64 a cada novo domínio."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 42,
+      "symbol": "FailureResponse",
+      "severity": "low",
+      "issue": "fiado.FailureResponse duplica sync.FailureResponse — o próprio comentário admite (\"same shape as sync.FailureResponse\"), e handler/fiado.go:62 duplica writeSyncFailure de handler/sync_response.go:12. Um tipo/escritor de erro compartilhado evitaria que os formatos divirjam entre rotas."
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router.go",
+      "line": 20,
+      "symbol": "MountFiado",
+      "severity": "low",
+      "issue": "A rota é montada em `/api/v1/customers`, com prefixo versionado, enquanto todas as demais rotas desta API são não versionadas (`/auth`, `/sync`, `/notas`, `/invoices` em cmd/server/main.go) e o cliente desktop monta URLs como `${API_BASE_URL}/sync/initial` (packages/desktop/src/services/sync.ts). Isso introduz dois esquemas de versionamento conviventes na mesma API; nenhum consumidor no desktop chama /api/v1 ainda, então a escolha ainda é reversível sem quebrar clientes."
+    }
+  ]
+}

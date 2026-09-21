@@ -17,6 +17,8 @@
 #   +2 — c-2: helpers pgtype duplicados de internal/sync/pgconv.go, e
 #        productID semeado no teste e nunca usado
 #   +1 — a-1 (reexecução): rota versionada convivendo com rotas na raiz
+#   +2 — experimento D: FailureResponse/writeFiadoFailure duplicando os
+#        equivalentes de sync, e segunda linha do stub nunca comparada
 #
 # Que o primeiro review com teto folgado tenha acrescentado 3 confirma que
 # este conjunto é um PISO, não um teto. Recall medido contra ele é otimista.
@@ -27,7 +29,7 @@ snapshot:
   feature: "GET /api/v1/customers/{id}/fiado"
   archive: snapshot.tar.gz
 
-known_total: 23
+known_total: 25
 
 defects:
   - id: sqlc-not-generated
@@ -260,6 +262,29 @@ defects:
       cliente desktop passa a manter duas bases de caminho. Verificado.
     match_any: ["/api/v1/customers\" enquanto", "sem versionamento", "dois esquemas",
                 "duas bases de caminho", "esquemas de url", "rota versionada"]
+
+  - id: failure-response-duplicated
+    severity: low
+    file: packages/api-go/internal/fiado/types.go
+    title: "FailureResponse e writeFiadoFailure duplicam os equivalentes de sync"
+    detail: >
+      fiado/types.go:42 define FailureResponse com os mesmos campos de
+      sync/types.go:169, e handler/fiado.go:62 duplica writeSyncFailure de
+      handler/sync_response.go:12. O próprio comentário admite ("same shape as
+      sync.FailureResponse"). Verificado nos quatro pontos.
+    match_any: ["failureresponse", "writesyncfailure", "sync_response.go", "duplica sync",
+                "same shape as sync"]
+
+  - id: second-stub-row-unchecked
+    severity: low
+    file: packages/api-go/internal/fiado/pending_test.go
+    title: "segunda linha do stub é declarada e nunca comparada"
+    detail: >
+      TestListPending_success assere len(out.Data) == 2 e depois só inspeciona
+      out.Data[0] (linha 119). Um bug que replicasse a primeira linha em todas
+      as seguintes passaria. Verificado.
+    match_any: ["out.data[0]", "segunda linha", "so inspeciona", "só inspeciona",
+                "nunca comparada", "first := out.data"]
 
   - id: single-letter-params
     severity: low

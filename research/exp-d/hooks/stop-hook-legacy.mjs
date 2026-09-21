@@ -58,7 +58,7 @@ const jevCommand = () => {
   const onPath = spawnSync("sh", ["-c", "command -v jev"], { encoding: "utf8", timeout: 5000 });
   if (onPath.status === 0 && (onPath.stdout ?? "").trim()) return "jev";
   const here = path.dirname(new URL(import.meta.url).pathname);
-  return `node ${path.resolve(here, "../../src/cli.mjs")}`;
+  return `node ${path.resolve(here, "../../../src/cli.mjs")}`;  // profundidade daqui
 };
 
 /**

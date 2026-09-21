@@ -90,8 +90,11 @@ echo "$((END-START))" > "$OUT/seconds.txt"
 echo "$STATUS" > "$OUT/exit.txt"
 
 # ---------- coleta ----------
+# O subagente nem sempre usa o nome canônico (d2-2 gravou fiado_findings.json
+# quando a triagem falhou). Qualquer arquivo de achados serve para pontuar.
 rm -f "$OUT/findings.json"
-for f in "$REPO/.jev-exp/findings.json" "$REPO/.jev/findings.json"; do
+for f in "$REPO/.jev-exp/findings.json" "$REPO/.jev/findings.json" \
+         "$REPO"/.jev/*findings*.json "$REPO"/.jev-exp/*findings*.json; do
   if [ -f "$f" ]; then cp "$f" "$OUT/findings.json"; break; fi
 done
 [ -d "$REPO/.jev" ] && cp -R "$REPO/.jev" "$OUT/jev-dir" 2>/dev/null

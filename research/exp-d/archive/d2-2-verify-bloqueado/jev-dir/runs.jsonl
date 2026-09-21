@@ -1,0 +1,2 @@
+{"at":"2026-09-21T15:58:15.379Z","status":"completed","gate":"passed","reason":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"rules":["AGENTS.md"],"deterministic_findings":0,"passes":["correctness","tests"],"session":"eb86107e-5d10-40c2-b06b-41069681bdef"}
+{"at":"2026-09-21T16:02:24.279Z","status":"skipped","reason":"already_reviewed","session":"eb86107e-5d10-40c2-b06b-41069681bdef"}

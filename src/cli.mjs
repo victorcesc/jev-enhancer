@@ -96,13 +96,33 @@ const cmdPrepare = () => {
 
 const cmdVerify = async () => {
   const file = args.find((a) => !a.startsWith("--")) ?? ".jev/findings.json";
-  const full = path.isAbsolute(file) ? file : path.join(root, file);
+  let raw;
+  if (file === "-") {
+    // stdin: o chamador manda os achados direto, sem gravar arquivo antes.
+    // Poupa um turno inteiro do subagente — e um turno lá custa ~71k tokens.
+    raw = readFileSync(0, "utf8");
+  } else {
+    const full = path.isAbsolute(file) ? file : path.join(root, file);
+    try {
+      raw = readFileSync(full, "utf8");
+    } catch (e) {
+      die(`não consegui ler os achados em ${file}: ${e.message}`);
+    }
+  }
   let findings = [];
   try {
-    const parsed = JSON.parse(readFileSync(full, "utf8"));
+    const parsed = JSON.parse(raw);
     findings = Array.isArray(parsed) ? parsed : (parsed.findings ?? []);
   } catch (e) {
-    die(`não consegui ler os achados em ${file}: ${e.message}`);
+    die(`achados inválidos: ${e.message}`);
+  }
+  // preserva o bruto para auditoria quando veio por stdin
+  if (file === "-") {
+    try {
+      writeFileSync(path.join(root, ".jev", "findings.json"), raw);
+    } catch {
+      /* auditoria é conveniência */
+    }
   }
   // o diff congelado no bloqueio é a evidência que o Jev usa para julgar
   let diff = "";

@@ -35,6 +35,40 @@ const findTranscript = (sessionId) => {
   return null;
 };
 
+/**
+ * Subagentes têm transcript PRÓPRIO, em <sessão>/subagents/. Ignorá-los
+ * subestima o custo do review — no primeiro experimento eles eram 77% do
+ * total e ficaram invisíveis, levando a um ganho reportado de 57% quando o
+ * real era 26%.
+ */
+const subagentCost = (sessionId) => {
+  const base = path.join(os.homedir(), ".claude", "projects");
+  if (!existsSync(base) || !sessionId) return { turns: 0, tokens: 0, cache_read: 0, output: 0, agents: 0 };
+  const acc = { turns: 0, tokens: 0, cache_read: 0, output: 0, agents: 0 };
+  for (const proj of readdirSync(base)) {
+    const dir = path.join(base, proj, sessionId, "subagents");
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".jsonl"))) {
+      acc.agents += 1;
+      const seen = new Set();
+      for (const e of readJsonl(path.join(dir, f))) {
+        const m = e.message;
+        if (!m || typeof m !== "object" || m.role !== "assistant") continue;
+        const id = m.id ?? Math.random();
+        if (seen.has(id)) continue;
+        seen.add(id);
+        acc.turns += 1;
+        if (m.usage) {
+          acc.tokens += sumTokens(m.usage);
+          acc.cache_read += m.usage.cache_read_input_tokens ?? 0;
+          acc.output += m.usage.output_tokens ?? 0;
+        }
+      }
+    }
+  }
+  return acc;
+};
+
 const TOKEN_KEYS = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
 const sumTokens = (u) => (u ? TOKEN_KEYS.reduce((s, k) => s + (u[k] ?? 0), 0) : 0);
 
@@ -146,6 +180,7 @@ export const inspectRun = (root, sessionId) => {
   const tfile = sid ? findTranscript(sid) : null;
   report.transcript = tfile ? analyzeTranscript(tfile) : null;
   report.transcript_file = tfile;
+  report.subagent = subagentCost(sid);
 
   // 5. read-only
   report.read_only = readOnlyCheck(root);
@@ -211,6 +246,17 @@ export const renderInspect = (report) => {
       const perTurn = Math.round(t.cache_read_after / t.turns_after);
       L.push(`  → contexto re-cobrado: ${t.cache_read_after.toLocaleString()} (${share}%) · trabalho real (output): ${t.output_after.toLocaleString()}`);
       L.push(`  → ${t.turns_after} turnos × ${perTurn.toLocaleString()} de contexto; com 2 turnos seria ${(2 * perTurn).toLocaleString()}`);
+    }
+
+    // O subagente costuma dominar o custo e vive fora do transcript principal.
+    const s = report.subagent;
+    if (s && s.agents > 0) {
+      const perTurn = s.turns > 0 ? Math.round(s.cache_read / s.turns) : 0;
+      L.push("");
+      L.push(`  SUBAGENTE(S): ${s.agents} · ${s.turns} turnos · ${s.tokens.toLocaleString()} tokens`);
+      L.push(`    contexto re-cobrado: ${s.cache_read.toLocaleString()} · output: ${s.output.toLocaleString()} · ${perTurn.toLocaleString()}/turno`);
+      const total = t.tokens_after + s.tokens;
+      L.push(`  CUSTO TOTAL DO REVIEW: ${total.toLocaleString()} (principal ${((t.tokens_after / total) * 100).toFixed(0)}% + subagente ${((s.tokens / total) * 100).toFixed(0)}%)`);
     }
   }
 

@@ -81,45 +81,45 @@ const renderContext = (diff, rules, detFindings) => {
   return parts.join("\n");
 };
 
-/** Protocolo completo, executado DENTRO do subagente (contexto fresco). */
+/**
+ * Protocolo do subagente — escrito para MINIMIZAR TURNOS.
+ *
+ * A versão anterior enumerava 5 passos e o subagente gastou 24 turnos: 19
+ * deles produzindo 3-8 tokens cada, enquanto reliam ~71k de contexto. Pedir
+ * orquestração produz orquestração.
+ *
+ * Esta versão descreve o RESULTADO esperado e a sequência exata de 3 ações,
+ * em vez de etapas de raciocínio. As duas análises continuam existindo como
+ * exigência do conteúdo, não como passos separados no tempo.
+ */
 const subagentPrompt = (contextFile, config, detCount) => {
-  const passes = config?.review?.passes ?? ["correctness", "tests"];
   const rel = path.basename(contextFile);
-  return `Você é um revisor de código sênior. Execute o protocolo abaixo INTEIRO e
-devolva APENAS o JSON final — sem preâmbulo, sem raciocínio, sem relatório.
+  return `Revisor de código sênior. Execute exatamente três ações, sem etapas
+intermediárias e sem narrar o que vai fazer. Cada turno seu relê todo o
+contexto acumulado e custa caro — trabalhe em silêncio e entregue.
 
-Leia o contexto: \`.jev/${rel}\` (diff da mudança, invariantes do repositório${
-    detCount ? `, e ${detCount} achado(s) já verificados por ferramenta determinística` : ""
+AÇÃO 1 — Leia \`.jev/${rel}\` (diff, invariantes do repositório${
+    detCount ? `, ${detCount} achado(s) já verificados por ferramenta` : ""
   }).
 
-## Passo 1 — análise de CORREÇÃO
-Defeitos funcionais/lógicos introduzidos pelo diff: estado inconsistente,
-caminhos de falha não tratados, corridas, donos duplicados de um mesmo estado,
-recursos não liberados, violações dos invariantes do repositório. Priorize o
-que quebra em produção e que os testes não pegariam.
+AÇÃO 2 — Analise e envie os achados direto para a triagem, num único comando:
 
-## Passo 2 — análise de TESTES
-Comportamento introduzido ou alterado sem cobertura; caminhos infelizes não
-exercitados; testes que asseguram menos do que aparentam (campos declarados e
-nunca comparados, asserções ausentes).
+  echo '{"findings":[...]}' | JEV_VERIFY_CMD
 
-Faça as duas análises de forma independente antes de juntar — não deixe a
-primeira contaminar a segunda.
+Cada achado: {"file","line","symbol","issue","kind":"bug|rule","severity":"high|med|low"}
 
-## Passo 3 — consolidar
-Junte os achados dos ${passes.length} passos, remova duplicatas e grave em
-\`.jev/findings.json\`:
-{"findings":[{"file":"...","line":0,"symbol":"...","issue":"...","kind":"bug|rule","severity":"high|med|low"}]}
+Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
+• correção — defeitos funcionais/lógicos do diff: estado inconsistente, caminhos
+  de falha não tratados, corridas, donos duplicados de um mesmo estado, recursos
+  não liberados, violações dos invariantes do repositório. Priorize o que quebra
+  em produção e passa nos testes.
+• testes — comportamento novo ou alterado sem cobertura, caminhos infelizes não
+  exercitados, testes que asseguram menos do que aparentam (campos declarados e
+  nunca comparados, asserções ausentes).
 
-## Passo 4 — triagem
-Rode: \`JEV_VERIFY_CMD\`
-Isso grava \`.jev/findings-verified.json\` com o veredito do Jev por achado.
-
-## Passo 5 — resposta
-Responda SOMENTE com o JSON compacto abaixo, lendo de findings-verified.json.
-Inclua no máximo 10 achados, ordenados por severidade. Campo \`summary\` com no
-máximo 140 caracteres. NÃO inclua o raciocínio nem o relatório completo — eles
-ficam nos arquivos.
+AÇÃO 3 — Responda SOMENTE o JSON abaixo, preenchido com a saída da triagem.
+Máximo 10 achados, ordenados por severidade; \`summary\` até 140 caracteres.
+Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
 
 {"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"rejected":0},
  "findings":[{"file":"...","line":0,"severity":"high","summary":"..."}]}`;
@@ -156,7 +156,7 @@ export const prepare = (root, config, opts = {}) => {
     promptFile,
     subagentPrompt(contextFile, config, det.findings.length).replace(
       "JEV_VERIFY_CMD",
-      `${opts.jevCommand ?? "jev"} verify .jev/findings.json`,
+      `${opts.jevCommand ?? "jev"} verify -`,
     ),
   );
 

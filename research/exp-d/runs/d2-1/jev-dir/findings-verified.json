@@ -1,0 +1,144 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 9
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 17,
+      "symbol": "PendingStore",
+      "issue": "O codigo sqlc gerado para query/fiado.sql nunca foi regenerado: nao existe internal/db/fiado.sql.go. `go build ./...` falha com undefined: db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams/Row, db.SummarizePendingFiadoSalesByCustomerParams/Row. Todo o pacote api-go nao compila e nenhum teste (unit ou integracao) roda. AGENTS.md exige rodar make -C packages/api-go sqlc apos mudar query/.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.47
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "Em erro de conversao ou numeric NULL a funcao devolve 0 silenciosamente. Como ela converte total, total_paid, balance e total_devido, uma falha de decodificacao transforma a divida do cliente em R$ 0,00 numa resposta 200 de sucesso — pior que um 500. Nenhum teste cobre o ramo de erro.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 2.81,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.82)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O LEFT JOIN usa uma subquery que agrega a tabela payments inteira (SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id) sem nenhum filtro por user_id/customer_id. O predicado do cliente nao pode ser empurrado para dentro do GROUP BY, entao cada request escaneia e agrega todos os pagamentos de todos os tenants — duas vezes (list + summary). Em base multi-tenant isso degrada para O(total de pagamentos) por chamada. Um EXISTS/subquery correlacionada por s.id usaria payments_sale_id_idx.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.42,
+        "evidence_sufficient": 0.75
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "issue": "summary (total_sales/total_devido) e as linhas da pagina sao lidos em duas queries independentes, fora de transacao. Se um pagamento quitar uma venda entre as duas leituras, a resposta devolve pagination.total/total_pages calculados sobre um conjunto e data sobre outro: a ultima pagina pode vir vazia com total>0, ou total_devido nao bater com a soma dos saldos. Dois donos do mesmo estado de paginacao sem snapshot consistente.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.84,
+        "severity_score": 2.13,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.84)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "O comentario Same customer id must not match another user sales promete cobrir o isolamento por tenant das queries de lista/summary, mas nenhuma venda e semeada para otherUserID e ListPendingFiadoSalesByCustomer nunca e chamada com par user/customer trocado. O filtro s.user_id do SQL fica sem exercicio: remover AND s.user_id = ... do query/fiado.sql mantem todos os testes verdes. O teste de servico equivalente usa stub, entao tambem nao valida o SQL.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 2.13,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.82)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "issue": "Os tres caminhos de falha do store descartam o erro original: nao ha %w nem log. Em producao uma falha de pool/timeout/SQL vira apenas INTERNAL_ERROR sem nenhum rastro para diagnostico, contrariando o AGENTS.md (retornar erros das camadas inferiores, logar na fronteira, embrulhar com %w).",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 1.58,
+        "evidence_sufficient": 0.8
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "O ramo generico (err que nao e *apperror.AppError, resposta 500 mascarada) nao tem nenhum teste: fiado_router_test.go so injeta apperror.New. Uma regressao que vaze a mensagem interna do erro cru no corpo da resposta passaria despercebida.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.64,
+        "severity_score": 1.56,
+        "evidence_sufficient": 0.8
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.64)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 176,
+      "symbol": "TestCustomerFiado_invalidParams",
+      "issue": "O teste de parametros invalidos so compara rec.Code com 400 e que o lister nao foi chamado; nunca decodifica o corpo nem compara code/message. O contrato VALIDATION_ERROR (e a diferenca entre ID do cliente invalido e Parametro page/limit invalido) fica sem assercao — trocar o code por string vazia continuaria verde.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.8,
+        "severity_score": 1.14,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.80)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 102,
+      "symbol": "timestamptzTime",
+      "issue": "numericFloat e timestamptzTime sao copias literais de internal/sync/pgconv.go. Alem da duplicacao, o bool de timestamptzTime e descartado no unico call site (saleDate, _ :=) e sales.sale_date e NOT NULL, entao o segundo retorno e codigo morto.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 0.44,
+        "evidence_sufficient": 0.82
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler internal/sync/pgconv.go",
+      "resolved_by": "retrieval"
+    }
+  ]
+}

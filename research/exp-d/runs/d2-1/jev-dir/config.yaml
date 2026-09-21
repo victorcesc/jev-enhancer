@@ -1,0 +1,37 @@
+# jev-enhancer — configuração do repositório
+review:
+  max_findings: 20
+  passes:
+    - correctness
+    - tests
+
+# Arquivos de instrução do repo. Viram os invariantes que o review usa.
+rules:
+  - AGENTS.md
+  - CLAUDE.md
+
+# Cost gate: decide DETERMINISTICAMENTE se o diff merece review.
+# Roda em toda parada do agente, então precisa ser barato.
+gate:
+  min_diff_lines: 20
+  code_extensions:
+    - .go
+    - .gd
+    - .ts
+    - .tsx
+    - .js
+    - .mjs
+    - .py
+    - .rs
+    - .tscn
+  ignore_paths:
+    - docs/
+    - .jev/
+
+# Checks determinísticos do PRÓPRIO projeto. Cada comando deve sair 0 e
+# imprimir JSON. Ferramentas do seu repo não viram dependência daqui.
+deterministic:
+  commands: []
+
+verify:
+  enabled: true

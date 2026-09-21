@@ -1,0 +1,67 @@
+{
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "severity": "high",
+      "issue": "query/fiado.sql foi adicionado mas o sqlc nao foi regenerado: internal/db nao contem GetCustomerByUserIDAndIDParams, ListPendingFiadoSalesByCustomerParams/Row nem SummarizePendingFiadoSalesByCustomerParams/Row. `go build ./...` falha com 8 erros 'undefined: db.*' em internal/fiado/pending.go (linhas 18-20, 35, 45, 66). O repositorio inteiro esta quebrado; falta rodar `make -C packages/api-go sqlc`."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 29,
+      "symbol": "ListPendingFiadoSalesByCustomer / SummarizePendingFiadoSalesByCustomer",
+      "severity": "med",
+      "issue": "O LEFT JOIN usa a subquery derivada `(SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id)` sem nenhum filtro de tenant. O Postgres nao empurra o predicado s.user_id/s.customer_id para dentro de um GROUP BY, entao cada requisicao agrega a tabela payments inteira (todos os usuarios) - e duas vezes, pois a subquery e repetida na query de resumo. Nenhum indice ajuda. Um LATERAL correlacionado (LEFT JOIN LATERAL (SELECT SUM(amount) FROM payments WHERE sale_id = s.id) p ON TRUE) evitaria o scan completo."
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "severity": "med",
+      "issue": "O comentario 'Same customer id must not match another user's sales' promete cobertura de isolamento multi-tenant que o teste nao entrega: otherCustomerID e criado mas nenhuma venda e semeada para otherUserID apontando para o customerID do primeiro usuario. O unico subteste que usa otherUserID ('with no open sales') consulta um cliente sem nenhuma venda, logo retorna 0 trivialmente. O filtro s.user_id de ListPendingFiadoSalesByCustomer e SummarizePendingFiadoSalesByCustomer permanece sem teste."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "severity": "low",
+      "issue": "O resumo (total_devido / total / total_pages) e a pagina de vendas sao lidos em duas queries independentes, fora de transacao. Um pagamento inserido entre as duas chamadas faz a resposta devolver, por exemplo, pagination.total=5 com 4 itens e total_devido inconsistente com a soma dos saldos exibidos."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "internalError",
+      "severity": "low",
+      "issue": "Os tres caminhos de erro descartam o erro original (sem %w e sem log) e devolvem um AppError generico. Uma falha de conexao ou de query vira um 500 sem nenhum rastro em log, impossivel de diagnosticar. O AGENTS.md pede wrap com %w e log na fronteira; o middleware Bearer ja loga assim (internal/middleware/bearer.go:65). Mesma limitacao existe em internal/sync/initial.go, mas o codigo novo a propaga."
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 38,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "severity": "low",
+      "issue": "Divergencia com a paridade declarada no cabecalho do arquivo. O desktop (sale_repository.rs:199) usa `(p.total_paid IS NULL OR p.total_paid < s.total)`, que mantem em aberto qualquer venda sem pagamento. A versao Go usa `COALESCE(p.total_paid, 0) < s.total`, que exclui vendas fiado com total = 0 (ou negativo, em caso de estorno) e sem pagamentos. Os dois lados divergem para essas vendas."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "timestamptzTime",
+      "severity": "low",
+      "issue": "O segundo valor de retorno (validade) e sempre descartado no unico chamador (`saleDate, _ := ...`), tornando a funcao equivalente a t.Time. Se sale_date vier NULL/invalido, o JSON emite '0001-01-01T00:00:00Z' como se fosse uma data real em vez de null ou erro. Hoje schema.sql:98 declara sale_date NOT NULL, entao o codigo morto apenas esconde o caso; o sinal computado deveria ser usado ou removido."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 55,
+      "symbol": "Page.Offset",
+      "severity": "low",
+      "issue": "Page tem campos exportados e pode ser construido diretamente (`fiado.Page{Number: n, Limit: l}`), como o proprio page_test.go faz na linha 57, ignorando os limites MaxPage/MaxLimit que NewPage aplica. Offset() faz `int32((p.Number-1)*p.Limit)` sem verificacao: com Number/Limit grandes o resultado estoura int32 e vira um OFFSET negativo (erro de SQL) ou um offset arbitrario. O comentario 'Build it with NewPage' nao e aplicado por nada."
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "severity": "low",
+      "issue": "Erros de conversao e NUMERIC nulo sao silenciosamente convertidos em 0. Se SUM devolver um valor nao representavel (NaN) ou NULL inesperado, o cliente recebe HTTP 200 com total_devido/saldo = 0,00 - um valor monetario errado apresentado como sucesso - em vez de um 500. O helper equivalente do teste de integracao (fiado_integration_test.go:19) trata esses mesmos casos como falha."
+    }
+  ]
+}

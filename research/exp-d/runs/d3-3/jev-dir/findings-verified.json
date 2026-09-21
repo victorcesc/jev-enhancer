@@ -1,0 +1,190 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 11,
+    "needs_context": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 18,
+      "symbol": "PendingStore",
+      "issue": "O codigo sqlc de query/fiado.sql nunca foi regerado/commitado: internal/db nao tem fiado.sql.go, entao db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerRow e db.SummarizePendingFiadoSalesByCustomerRow nao existem. Verifiquei com 'go build ./...' em packages/api-go: falha com 8 erros 'undefined: db.*' em internal/fiado/pending.go, e 'go vet ./...' tambem quebra em internal/db/fiado_integration_test.go:107 ('queries.GetCustomerByUserIDAndID undefined'). O modulo inteiro (cmd/server incluso) nao compila. Falta rodar 'make -C packages/api-go sqlc' e commitar internal/db/fiado.sql.go + querier.go/db.go atualizados (sqlc.yaml usa emit_interface e emit_prepared_queries).",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.89,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.47
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.89)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 23,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "O LEFT JOIN usa uma subquery agregada sem nenhum filtro: SELECT sale_id, SUM(amount) FROM payments GROUP BY sale_id. Postgres nao consegue empurrar os predicados s.user_id/s.customer_id para dentro de uma subquery com GROUP BY no lado anulavel de um LEFT JOIN, entao cada requisicao agrega a tabela payments INTEIRA (multi-tenant, todos os usuarios) - e faz isso duas vezes por request, porque SummarizePendingFiadoSalesByCustomer repete o mesmo padrao. O original do desktop (sale_repository.rs:192) faz o mesmo, mas ali o SQLite e single-tenant. Em producao com payments crescendo o endpoint degrada linearmente com o volume global. Correcao: LATERAL/correlated subquery filtrando por s.id, ou agregar payments com JOIN em sales filtrado por user_id/customer_id.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 2.77,
+        "evidence_sufficient": 0.57
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending_test.go",
+      "line": 51,
+      "symbol": "stubStore.SummarizePendingFiadoSalesByCustomer",
+      "issue": "O stub descarta os params ('_ db.SummarizePendingFiadoSalesByCustomerParams') enquanto o irmao ListPendingFiadoSalesByCustomer grava em s.listParams e e checado em TestListPending_totalDevidoSpansAllPages. Nenhum teste verifica que a query de resumo recebe o user_id/customer_id corretos. Se ListPending passasse o customerID no campo UserID (ou um ID trocado) na chamada de SummarizePendingFiadoSalesByCustomer, o total_devido de outro tenant vazaria no corpo da resposta e toda a suite continuaria verde - exatamente o cenario que TestListPending_customerOfAnotherUserIs404 aparenta cobrir mas nao cobre.",
+      "kind": "test",
+      "severity": "med",
+      "jev": {
+        "valid": 0.83,
+        "severity_score": 2.65,
+        "evidence_sufficient": 0.71
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.83)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "numericFloat engole o erro de conversao e retorna 0. Um NUMERIC que falhe em Float64Value (ou venha NULL) faz valor_original/valor_pago/saldo/total_devido irem como 0.00 para o cliente - o cliente aparenta nao dever nada em vez de a requisicao falhar. Nenhum teste cobre Numeric invalido/NULL: mustNumeric so gera valores validos.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.45,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "O prefixo adicionado e '/api/v1/customers/' (com barra), amplo demais e nao casando com '/api/v1/customers' sem barra. Qualquer rota futura sob /api/v1/customers/* passa a dispensar X-API-Key automaticamente so por ter header Authorization: Bearer, sem revisao - o restante da lista usa prefixos de feature ('/sync/', '/notas/'), nao um namespace de versao de API inteiro.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.55,
+        "severity_score": 2.14,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.55)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "PendingService.ListPending",
+      "issue": "O resumo (SummarizePendingFiadoSalesByCustomer) e a pagina (ListPendingFiadoSalesByCustomer) sao duas queries separadas, sem transacao/snapshot compartilhado. Com um pagamento ou venda fiado concorrente entre as duas chamadas, pagination.total/total_pages/total_devido descrevem um estado diferente do de data[]; ao paginar, uma venda pode aparecer duas vezes ou ser pulada (o OFFSET desloca). Basta o PDV sincronizar um pagamento enquanto o cliente pagina a lista de fiado.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 2.1,
+        "evidence_sufficient": 0.66
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 90,
+      "symbol": "internalError",
+      "issue": "internalError() descarta o erro original do pgx: nao usa %w e nao loga. O handler tambem nao loga (writeFiadoFailure em handler/fiado.go:60 so serializa o AppError) e apimw.Recover so trata panics. Resultado: qualquer falha de banco em GET /api/v1/customers/{id}/fiado vira um 500 opaco sem nenhum rastro nos logs - impossivel diagnosticar em producao. Viola AGENTS.md ('Return errors from lower layers and log at process or handler boundaries' e 'Wrap inspectable errors with %w').",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 2.02,
+        "evidence_sufficient": 0.74
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 154,
+      "symbol": "TestPendingFiadoQueries paginates",
+      "issue": "O teste de paginacao seeda vendas com sale_date todos distintos (1..5 dias atras), entao o desempate 'ORDER BY s.sale_date DESC, s.id DESC' nunca e exercitado. Duas vendas fiado no mesmo instante (caso comum quando o PDV sincroniza um lote offline com o mesmo timestamp) dependem do s.id DESC para ter ordem estavel entre paginas; remover o tiebreaker faria linhas se repetirem/sumirem entre page=1 e page=2 e todos os testes continuariam passando.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.63,
+        "severity_score": 1.89,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.63)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 170,
+      "symbol": "TestCustomerFiado_invalidParams",
+      "issue": "O teste de 400 so assere rec.Code e que o service nao foi chamado; nunca decodifica o corpo para checar o envelope fiado.FailureResponse (success=false, code=VALIDATION_ERROR, message). E TestCustomerFiado_responseKeys nunca assere rec.Code. Uma regressao que trocasse o shape do erro (ex.: voltar para apperror.WriteJSON, que emite error/code em vez de success/message/code) quebraria o cliente desktop e passaria nos testes.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.82,
+        "severity_score": 1.73,
+        "evidence_sufficient": 0.65
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.82)"
+    },
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 5,
+      "symbol": "GetCustomerByUserIDAndID",
+      "issue": "A checagem de existencia do cliente ignora customers.active, entao fiado de um cliente desativado continua sendo listado; nenhum teste (unit ou integracao) documenta a intencao - customers.active existe no schema e tem indice dedicado (customers_user_id_active_idx). Alem disso a query seleciona as 10 colunas do cliente quando o service so usa o resultado como existence check.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.61,
+        "severity_score": 1.72,
+        "evidence_sufficient": 0.53
+      },
+      "verdict": "needs_context",
+      "reason": "caminho citado não foi encontrado no repositório"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending saleDate",
+      "issue": "'saleDate, _ := timestamptzTime(row.SaleDate)' descarta o flag de validade, entao um sale_date NULL/invalido e serializado silenciosamente como 0001-01-01T00:00:00Z no campo 'data' do JSON em vez de erro ou omissao. Nenhum teste (unit ou integracao) exercita SaleDate invalido - o unico consumidor do bool e o proprio helper, que fica morto.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 1.41,
+        "evidence_sufficient": 0.73
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 102,
+      "symbol": "numericFloat e timestamptzTime",
+      "issue": "numericFloat e timestamptzTime sao copias verbatim de internal/sync/pgconv.go:11 e :35, e fiado.FailureResponse (types.go) duplica sync.FailureResponse (o proprio comentario admite 'same shape as sync.FailureResponse'). AGENTS.md pede 'use existing libraries/patterns first'; os helpers de conversao pgtype deveriam ir para um pacote compartilhado em vez de uma terceira copia.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.79,
+        "severity_score": 0.3,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler internal/sync/pgconv.go",
+      "resolved_by": "retrieval"
+    }
+  ]
+}

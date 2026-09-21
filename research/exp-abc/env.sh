@@ -13,7 +13,11 @@
 #    afins. Limpar tudo antes garante que cada execução do experimento é uma
 #    sessão isolada e comparável.
 #
-# Uso: `. env.sh` (precisa de JEV definido)
+# Uso: `. env.sh` — resolve JEV sozinho se o chamador não tiver definido.
+
+# Sem isto, `. env.sh` de um cwd qualquer procurava /.env e falhava dizendo
+# "nenhuma credencial", quando o problema era só o caminho.
+: "${JEV:=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 
 for _v in $(printenv | grep -o "^CLAUDE[A-Z_]*=" | tr -d '='); do unset "$_v"; done
 unset _v

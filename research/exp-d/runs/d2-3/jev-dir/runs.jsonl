@@ -1,0 +1,3 @@
+{"at":"2026-09-21T17:06:32.682Z","status":"completed","gate":"passed","reason":"passed","stats":{"files":14,"relevant_files":12,"changed_lines":1276},"rules":["AGENTS.md"],"deterministic_findings":0,"passes":["correctness","tests"],"session":"e9583fe6-008e-4715-895c-68598a663d0f"}
+{"at":"2026-09-21T17:09:36.862Z","status":"completed","stage":"verify","mode":"jev","findings":12,"verified":12,"verdicts":{"confirmed":11,"needs_context":1},"jev_tokens":21112,"ms":2479}
+{"at":"2026-09-21T17:10:08.402Z","status":"skipped","reason":"already_reviewed","session":"e9583fe6-008e-4715-895c-68598a663d0f"}

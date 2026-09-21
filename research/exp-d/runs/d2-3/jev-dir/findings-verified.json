@@ -1,0 +1,190 @@
+{
+  "mode": "jev",
+  "verdicts": {
+    "confirmed": 11,
+    "needs_context": 1
+  },
+  "findings": [
+    {
+      "file": "packages/api-go/query/fiado.sql",
+      "line": 21,
+      "symbol": "ListPendingFiadoSalesByCustomer",
+      "issue": "The sqlc code for query/fiado.sql was never regenerated: internal/db has no fiado.sql.go and querier.go has no fiado methods. go build ./... fails with undefined: db.GetCustomerByUserIDAndIDParams, db.ListPendingFiadoSalesByCustomerParams/Row, db.SummarizePendingFiadoSalesByCustomerParams/Row (internal/fiado/pending.go:18-20,35,45,66) and go vet fails on internal/db/fiado_integration_test.go:107. The whole feature does not compile; make -C packages/api-go sqlc was not run and the generated file is not staged.",
+      "kind": "bug",
+      "severity": "high",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.99,
+        "evidence_sufficient": 0.46
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/middleware/routes.go",
+      "line": 22,
+      "symbol": "bearerRoutePrefixes",
+      "issue": "The exemption is a blanket prefix /api/v1/customers/, not the specific fiado route. Any future route mounted under /api/v1/customers/ (customer create/update/delete) silently loses the X-API-Key requirement as soon as the request carries any Authorization: Bearer header, even a syntactically bogus one. apikey_test only proves the exemption fires, never that it is scoped to GET .../fiado.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 2.68,
+        "evidence_sufficient": 0.52
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.86)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 45,
+      "symbol": "ListPending",
+      "issue": "SummarizePendingFiadoSalesByCustomer and ListPendingFiadoSalesByCustomer are two independent queries outside a transaction. If a payment settles a sale between the two calls, pagination.total/total_pages and total_devido describe a different result set than data, so a client paging through gets duplicated or skipped sales and a total_devido that does not match the sum of saldos.",
+      "kind": "bug",
+      "severity": "med",
+      "jev": {
+        "valid": 0.87,
+        "severity_score": 2.45,
+        "evidence_sufficient": 0.61
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.87)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado.go",
+      "line": 62,
+      "symbol": "writeFiadoFailure",
+      "issue": "Errors from this route come in two incompatible JSON shapes: the handler writes {success,message,code} while the Bearer middleware and apperror.Handle (global Recover) write {error,code}. A client hitting 401 (no/invalid token) or a panic gets a body it cannot parse with fiado.FailureResponse. No test decodes the 401 body.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.84,
+        "severity_score": 2.24,
+        "evidence_sufficient": 0.48
+      },
+      "verdict": "needs_context",
+      "reason": "caminho citado não foi encontrado no repositório"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 94,
+      "symbol": "numericFloat",
+      "issue": "numericFloat returns 0 when Float64Value() errors or the numeric is NULL, so a value the driver cannot convert is reported to the client as saldo 0 / total_devido 0 (debt silently disappears) instead of surfacing an error. No test feeds an invalid or NULL pgtype.Numeric.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.85,
+        "severity_score": 2.2,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.85)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 42,
+      "symbol": "ListPending/internalError",
+      "issue": "Every store error is replaced by internalError(), a fresh apperror with no %w wrap of the original pgx error, and nothing logs it: handler.writeFiadoFailure (internal/handler/fiado.go:62) only serializes the AppError and never calls apimw.LoggerFromContext. A production 500 on this endpoint leaves no trace of the underlying DB failure, violating AGENTS.md (wrap inspectable errors with %w; log at handler boundaries).",
+      "kind": "rule",
+      "severity": "med",
+      "jev": {
+        "valid": 0.88,
+        "severity_score": 2.07,
+        "evidence_sufficient": 0.64
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.88)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/types.go",
+      "line": 60,
+      "symbol": "Page.TotalPages",
+      "issue": "TotalPages divides by p.Limit with no guard. Page is an exported struct with exported fields, so any caller building fiado.Page{Number:1} directly (or a future code path that skips NewPage) panics with integer divide by zero whenever total > 0. Offset() has the same exposure. No test covers a Page not produced by NewPage.",
+      "kind": "bug",
+      "severity": "low",
+      "jev": {
+        "valid": 0.77,
+        "severity_score": 1.71,
+        "evidence_sufficient": 0.75
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.77)"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 98,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "Comment claims Same customer id must not match another user sales, but no sale is ever seeded for otherUserID, and no sale of userID is ever queried with otherUserID. Every seedSale call uses (userID, customerID). The subtest at line 201 queries (otherUserID, otherCustomerID) which returns 0 rows trivially because otherCustomerID has no sales at all. Deleting s.user_id = sqlc.arg(user_id) from both ListPendingFiadoSalesByCustomer and SummarizePendingFiadoSalesByCustomer would still pass the whole file: the cross-tenant filter of the two money queries is asserted nowhere.",
+      "kind": "test",
+      "severity": "high",
+      "jev": {
+        "valid": 0.76,
+        "severity_score": 1.58,
+        "evidence_sufficient": 0.59
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.76)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 77,
+      "symbol": "ListPending",
+      "issue": "The ok result of timestamptzTime is discarded, so an invalid/NULL sale_date is serialized as data: 0001-01-01T00:00:00Z instead of being rejected or omitted. No test exercises an invalid pgtype.Timestamptz row.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.86,
+        "severity_score": 1.44,
+        "evidence_sufficient": 0.68
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.86)"
+    },
+    {
+      "file": "packages/api-go/internal/handler/fiado_router_test.go",
+      "line": 135,
+      "symbol": "TestCustomerFiado_responseKeys",
+      "issue": "items[0] is indexed without checking len(items). If the handler ever serializes data as empty or null, the test panics with index out of range instead of reporting a clear failure, and the data-item key assertions are silently skipped for any empty response.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.8,
+        "severity_score": 1.08,
+        "evidence_sufficient": 0.72
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.80)"
+    },
+    {
+      "file": "packages/api-go/internal/fiado/pending.go",
+      "line": 102,
+      "symbol": "numericFloat/timestamptzTime",
+      "issue": "Both helpers are verbatim copies of the unexported numericFloat and timestamptzTime in internal/sync/pgconv.go. AGENTS.md asks to reuse existing patterns; the duplicated pair now has to be kept in sync by hand in two packages.",
+      "kind": "rule",
+      "severity": "low",
+      "jev": {
+        "valid": 0.84,
+        "severity_score": 0.57,
+        "evidence_sufficient": 0.77
+      },
+      "verdict": "confirmed",
+      "reason": "confirmado após ler internal/sync/pgconv.go",
+      "resolved_by": "retrieval"
+    },
+    {
+      "file": "packages/api-go/internal/db/fiado_integration_test.go",
+      "line": 63,
+      "symbol": "TestPendingFiadoQueries",
+      "issue": "productID is seeded but never referenced by any sale_items row or assertion; the product seed is dead setup that suggests coverage of sale items that does not exist.",
+      "kind": "test",
+      "severity": "low",
+      "jev": {
+        "valid": 0.62,
+        "severity_score": 0.26,
+        "evidence_sufficient": 0.78
+      },
+      "verdict": "confirmed",
+      "reason": "Jev confirma (valid=0.62)"
+    }
+  ]
+}

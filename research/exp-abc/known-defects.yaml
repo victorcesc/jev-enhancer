@@ -1,0 +1,148 @@
+# Known defect set — NÃO é ground truth absoluta.
+#
+# São os 14 defeitos distintos que dois reviews independentes acharam no
+# snapshot `fiado` e que EU verifiquei manualmente no código, um a um.
+# Um terceiro review pode achar defeitos novos: quando achar e a verificação
+# confirmar, o defeito entra aqui e `known_total` sobe.
+#
+# Proveniência dos 14: união de dois reviews (ver docs/COMPARACAO-JUSTA.md).
+# Ambos estavam limitados a 10 achados pelo protocolo, então este conjunto
+# é quase certamente INCOMPLETO — é um piso, não um teto.
+
+snapshot:
+  repo: pdv-feat-baseline
+  base_commit: 4ae137b8c83fe102447e5a1a04e0d95df2b53180
+  feature: "GET /api/v1/customers/{id}/fiado"
+  archive: snapshot.tar.gz
+
+known_total: 14
+
+defects:
+  - id: sqlc-not-generated
+    severity: high
+    file: packages/api-go/query/fiado.sql
+    title: "sqlc não regenerado; go build ./... quebra"
+    detail: >
+      As três queries novas nunca passaram por `sqlc generate`: não existe
+      internal/db/fiado.sql.go e querier.go não tem os métodos. O pacote não
+      compila.
+    match_any: ["sqlc", "fiado.sql.go", "undefined: db.", "não compila", "nao compila", "go build"]
+
+  - id: payments-subquery-unfiltered
+    severity: med
+    file: packages/api-go/query/fiado.sql
+    title: "subquery de payments sem predicado agrega a tabela inteira"
+    detail: >
+      O LEFT JOIN usa SELECT sale_id, SUM(amount) FROM payments GROUP BY
+      sale_id sem WHERE. Agrega todos os tenants a cada request.
+    match_any: ["subquery", "sub-query", "sem predicado", "sem filtro", "tabela inteira", "full scan", "todos os tenants", "GROUP BY sale_id"]
+
+  - id: tenant-isolation-untested
+    severity: med
+    file: packages/api-go/internal/db/fiado_integration_test.go
+    title: "isolamento multi-tenant da listagem nunca exercitado"
+    detail: >
+      O teste cria otherUserID/otherCustomerID e comenta que o isolamento
+      importa, mas nunca semeia vendas para eles nem assere. Remover
+      s.user_id = $1 da SQL deixaria tudo verde.
+    match_any: ["otheruser", "othercustomer", "isolamento", "isolation", "multi-tenant", "multitenant", "vazamento"]
+
+  - id: error-discarded-no-wrap-no-log
+    severity: med
+    file: packages/api-go/internal/fiado/pending.go
+    title: "internalError descarta o erro original: sem %w e sem log"
+    detail: >
+      Todo erro de banco vira apperror.New genérico. Sem %w, sem log, e o
+      handler também não loga. 500 sem rastro.
+    match_any: ["internalerror", "%w", "sem log", "não loga", "nao loga", "erro original", "indiagnosticável", "indiagnosticavel"]
+
+  - id: fallback-branch-uncovered
+    severity: med
+    file: packages/api-go/internal/handler/fiado.go
+    title: "ramo de fallback não-AppError nunca exercitado"
+    detail: >
+      writeFiadoFailure tem um caminho para erro que não é *apperror.AppError,
+      mas o teste injeta um AppError, então errors.As sempre casa.
+    match_any: ["fallback", "errors.as", "não-apperror", "nao-apperror", "ramo", "internal_error"]
+
+  - id: numericfloat-swallows-error
+    severity: med
+    file: packages/api-go/internal/fiado/pending.go
+    title: "numericFloat engole erro e NULL retornando 0"
+    detail: >
+      if err != nil || !f.Valid { return 0 }. Valor monetário errado vai para
+      o cliente como 200/0.00 em vez de 500.
+    match_any: ["numericfloat", "numeric_float"]
+
+  - id: timestamptz-validity-discarded
+    severity: low
+    file: packages/api-go/internal/fiado/pending.go
+    title: "validade do timestamptz descartada (saleDate, _ :=)"
+    detail: >
+      O bool de validade é ignorado; SaleDate inválido serializa como
+      0001-01-01T00:00:00Z em vez de erro ou null.
+    match_any: ["timestamptz", "saledate", "0001-01-01"]
+
+  - id: error-contract-divergence
+    severity: low
+    file: packages/api-go/internal/handler/fiado.go
+    title: "dois formatos de erro no mesmo endpoint"
+    detail: >
+      Middleware Bearer responde {error,code} via apperror; o handler responde
+      {success,message,code}. O cliente precisa parsear dois shapes.
+    match_any: ["dois formatos", "contrato de erro", "success/message", "success\", \"message", "apperror.writejson", "divergente", "inconsistente conforme"]
+
+  - id: pagination-contract-untested
+    severity: low
+    file: packages/api-go/internal/handler/fiado_router_test.go
+    title: "teste de contrato não desce em pagination; items[0] sem guard"
+    detail: >
+      TestCustomerFiado_responseKeys checa as chaves de topo e data[0] mas
+      nunca page/limit/total/total_pages. E indexa items[0] sem checar len.
+    match_any: ["pagination", "total_pages", "totalpages", "responsekeys", "items[0]"]
+
+  - id: no-transaction-summary-list
+    severity: low
+    file: packages/api-go/internal/fiado/pending.go
+    title: "summary e listagem são duas queries fora de transação"
+    detail: >
+      Se um pagamento quitar uma venda entre as duas chamadas, Pagination e
+      total_devido ficam inconsistentes com Data.
+    match_any: ["transação", "transacao", "transaction", "duas queries", "snapshot consistente", "atômic", "atomic"]
+
+  - id: page-offset-int32
+    severity: low
+    file: packages/api-go/internal/fiado/types.go
+    title: "Page.Offset converte para int32 sem checagem; invariante burlável"
+    detail: >
+      int32((p.Number-1)*p.Limit) só é seguro pelo invariante de NewPage, mas
+      Page tem campos exportados e é construído direto nos testes.
+    match_any: ["offset", "int32", "overflow", "maxpage", "newpage"]
+
+  - id: vacuous-assertion-invalidparams
+    severity: low
+    file: packages/api-go/internal/handler/fiado_router_test.go
+    title: "asserção vazia em TestCustomerFiado_invalidParams"
+    detail: >
+      `if lister.gotCustomerID != 0` nunca falha porque customerIDParam
+      retorna 0 em entrada inválida. Precisa de um campo `called bool`.
+    match_any: ["gotcustomerid", "invalidparams", "asserção vazia", "assercao vazia", "vacuous", "called bool", "nunca falha"]
+
+  - id: desktop-parity-coalesce
+    severity: low
+    file: packages/api-go/query/fiado.sql
+    title: "divergência de paridade com o desktop: COALESCE vs IS NULL"
+    detail: >
+      desktop sale_repository.rs:198 usa (p.total_paid IS NULL OR p.total_paid
+      < s.total); a API usa COALESCE(p.total_paid,0) < s.total. Divergem para
+      venda com total <= 0 e sem pagamento.
+    match_any: ["paridade", "parity", "sale_repository", "desktop", "is null or"]
+
+  - id: single-letter-params
+    severity: low
+    file: packages/api-go/internal/fiado/pending.go
+    title: "parâmetros de uma letra violam RULES.md (t reservado para *testing.T)"
+    detail: >
+      `n pgtype.Numeric`, `f`, `t pgtype.Timestamptz`. .cursor/rules/RULES.md:56
+      proíbe nomes de uma letra e reserva t para *testing.T.
+    match_any: ["uma letra", "single-letter", "single letter", "naming", "nomes de variáve", "nomes de variave", "rules.md"]

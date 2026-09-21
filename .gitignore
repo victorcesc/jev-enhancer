@@ -3,3 +3,4 @@ node_modules/
 .jev/review-context.md
 .jev/findings*.json
 .env
+research/exp-abc/original-config/

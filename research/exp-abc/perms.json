@@ -1,0 +1,46 @@
+{
+  "_comment": "Allowlist compartilhada pelos três braços. Review é somente leitura: o único caminho de escrita é o arquivo de achados. Nenhum comando destrutivo está liberado — o que não estiver aqui é negado, não pendura a execução headless.",
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Agent",
+      "Write(.jev-exp/**)",
+      "Write(.jev/**)",
+      "Bash(go build:*)",
+      "Bash(go vet:*)",
+      "Bash(go doc:*)",
+      "Bash(gofmt:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git show:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(mkdir:*)",
+      "Bash(echo:*)",
+      "Bash(node /Users/cesc/Projects/jev-enhancer/src/cli.mjs:*)"
+    ],
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(sqlc:*)",
+      "Bash(make:*)"
+    ]
+  }
+}

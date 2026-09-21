@@ -92,8 +92,15 @@ const renderContext = (diff, rules, detFindings) => {
  * em vez de etapas de raciocínio. As duas análises continuam existindo como
  * exigência do conteúdo, não como passos separados no tempo.
  */
+// Teto de achados reportados. Era 10 por arbitrariedade; nas duas primeiras
+// medições os dois braços pararam exatamente em 10, o que torna impossível
+// distinguir "achou 10" de "foi cortado em 10". 20 dá folga para o teto não
+// ser o que determina o resultado.
+const DEFAULT_MAX_FINDINGS = 20;
+
 const subagentPrompt = (contextFile, config, detCount) => {
   const rel = path.basename(contextFile);
+  const maxFindings = config?.review?.max_findings ?? DEFAULT_MAX_FINDINGS;
   return `Revisor de código sênior. Execute exatamente três ações, sem etapas
 intermediárias e sem narrar o que vai fazer. Cada turno seu relê todo o
 contexto acumulado e custa caro — trabalhe em silêncio e entregue.
@@ -118,7 +125,7 @@ Cubra DOIS eixos na mesma análise, sem deixar um contaminar o outro:
   nunca comparados, asserções ausentes).
 
 AÇÃO 3 — Responda SOMENTE o JSON abaixo, preenchido com a saída da triagem.
-Máximo 10 achados, ordenados por severidade; \`summary\` até 140 caracteres.
+Máximo ${maxFindings} achados, ordenados por severidade; \`summary\` até 140 caracteres.
 Sem preâmbulo, sem raciocínio, sem relatório — esses ficam nos arquivos.
 
 {"status":"reviewed","counts":{"total":0,"confirmed":0,"needs_context":0,"rejected":0},
